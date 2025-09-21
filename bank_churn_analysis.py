@@ -9,9 +9,6 @@ Original file is located at
 # Install & Load Library
 """
 
-!pip install dalex
-!pip install scikit-plot
-
 # Commented out IPython magic to ensure Python compatibility.
 # load pandas untuk data wrangling
 import pandas as pd
