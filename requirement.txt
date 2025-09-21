@@ -5,3 +5,5 @@ matplotlib
 seaborn
 scipy
 scikit-learn
+!pip install dalex
+!pip install scikit-plot
