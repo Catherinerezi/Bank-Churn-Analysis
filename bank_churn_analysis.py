@@ -35,19 +35,32 @@ from sklearn.experimental import enable_halving_search_cv
 from sklearn.model_selection import HalvingRandomSearchCV
 from sklearn.inspection import PartialDependenceDisplay
 
+try:
+    from xgboost import XGBClassifier
+    HAS_XGB = True
+except Exception:
+    HAS_XGB = False
+
 pd.set_option('display.max_columns', 100)
 
 """# Load Dataset"""
 
 # load dataset ke raw_data
 st.sidebar.header("⚙️ Pengaturan")
+FAST = st.sidebar.toggle("⚡ Mode cepat (rekomendasi)", value=True)
+SUBSAMPLE = 0.30 if FAST else 1.00
+CV_K = 3 if FAST else 5
+RUN_TUNING = st.sidebar.checkbox("Jalankan hyperparameter tuning (lambat)", value=not FAST)
+RUN_PERMIMP = st.sidebar.checkbox("Hitung Permutation Importance (cukup lama)", value=False if FAST else True)
+RUN_DALEX = st.sidebar.checkbox("Jalankan DALEX (sangat lambat)", value=False)
+INCLUDE_XGB = st.sidebar.checkbox("Sertakan XGBoost", value=not FAST)
 url_default = "https://raw.githubusercontent.com/hadimaster65555/dataset_for_teaching/refs/heads/main/dataset/bank_churn_dataset_2/Churn_Modelling.csv"
 URL = url_default
 
 uploaded = st.sidebar.file_uploader("Upload CSV", type=["csv"])
 test_size = st.sidebar.slider("Test size", 0.1, 0.4, 0.2, 0.05)
 seed = st.sidebar.number_input("Random state (SEED)", min_value=0, value=42, step=1)
-thr = st.sidebar.slider("Threshold prediksi (positif = churn)", 0.01, 0.99, 0.50, 0.01)
+ui_thr = st.sidebar.slider("Threshold prediksi (positif = churn)", 0.01, 0.99, 0.50, 0.01)
 
 @st.cache_data
 def load_df(file):
@@ -159,12 +172,16 @@ X = df.drop(["Exited"], axis=1)
 y = df["Exited"]
 
 # 2. Split data menjadi train dan test set (stratify agar distribusi Churn seimbang di kedua set)
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y,
-    test_size=test_size,
-    stratify=y,
-    random_state=1000
-)
+Xtrain_used, ytrain_used = X_train, y_train
+if FAST:
+    from sklearn.utils import resample
+    Xtrain_used, ytrain_used = resample(
+        X_train, y_train,
+        replace=False,
+        n_samples=max(1000, int(SUBSAMPLE * len(X_train))),
+        stratify=y_train,
+        random_state=seed
+    )
 
 # 3. Gabungkan kembali X_train dengan y_train untuk eksplorasi
 train_data = X_train.copy()
@@ -561,16 +578,28 @@ else:
 y = df["Exited"].astype(int)
 X = df.drop(columns=["Exited", "RowNumber", "CustomerId", "Surname"], errors="ignore")
 
+# Train/Test split (hindari leakage saat imputasi)
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=test_size, random_state=seed, stratify=y
+)
+
+Xtrain_used, ytrain_used = X_train, y_train
+if FAST:
+    from sklearn.utils import resample
+    Xtrain_used, ytrain_used = resample(
+        X_train, y_train,
+        replace=False,
+        n_samples=max(1000, int(SUBSAMPLE * len(X_train))),
+        stratify=y_train,
+        random_state=seed
+    )
+
 """Supaya model hanya belajar dari informasi relevan dan tidak “ngintip” target atau ID unik yang tidak ada di data baru:
 - y = df["Exited"].astype(int) → Ambil kolom Exited sebagai target (label churn) dan ubah ke tipe integer biar cocok untuk model ML.
 - X = df.drop([...]) → Buang kolom yang tidak relevan atau bisa bikin bias:
   - RowNumber, CustomerId, Surname → hanya ID/identitas, tidak punya pengaruh prediksi.
   - Exited → sudah jadi target, jadi harus dihapus dari fitur.
 """
-
-# Train/Test split (hindari leakage saat imputasi)
-X_train, X_test, y_train, y_test = train_test_split(
-  X, y, test_size=test_size, random_state=42, stratify=y)
 
 # Deteksi tipe kolom
 numeric_features = X_train.select_dtypes(include=["int64", "float64", "int32", "float32"]).columns.tolist()
@@ -816,22 +845,19 @@ preprocess = ColumnTransformer([
 
 # Model yang akan dibandingkan
 models = {
-  "Dummy(stratified)": DummyClassifier(strategy="stratified", random_state=seed),
   "LogReg": LogisticRegression(max_iter=1000, class_weight="balanced", random_state=seed),
-  "SVM-RBF": SVC(kernel="rbf", C=1.0, gamma="scale", class_weight="balanced", probability=True, random_state=seed),
+  # SVM tanpa probability=True agar jauh lebih cepat (AUC pakai decision_function)
+  "SVM-RBF": SVC(kernel="rbf", C=1.0, gamma="scale", class_weight="balanced", probability=False, random_state=seed),
   "DecisionTree": DecisionTreeClassifier(random_state=seed, class_weight="balanced"),
-  "RandomForest": RandomForestClassifier(n_estimators=300, random_state=seed, n_jobs=-1, class_weight="balanced_subsample")}
-
-# Check if XGBoost is available and add it to models if HAS_XGB is True
-try:
-    from xgboost import XGBClassifier
-    HAS_XGB = True
-except Exception:
-    HAS_XGB = False
-
-if HAS_XGB:
+  "RandomForest": RandomForestClassifier(
+      n_estimators=150 if FAST else 300,
+      random_state=seed, n_jobs=-1, class_weight="balanced_subsample"
+  ),
+}
+if INCLUDE_XGB and HAS_XGB:
     models["XGBoost"] = XGBClassifier(
-        n_estimators=400, max_depth=5, learning_rate=0.05,
+        n_estimators=300 if FAST else 400,
+        max_depth=5, learning_rate=0.05,
         subsample=0.9, colsample_bytree=0.9, reg_lambda=1.0,
         random_state=seed, n_jobs=-1, eval_metric="logloss", tree_method="hist"
     )
@@ -853,7 +879,7 @@ fig, ax = plt.subplots(figsize=(7,6))
 
 for name, clf in models.items():
     pipe = Pipeline([("prep", preprocess), ("clf", clf)])
-    pipe.fit(X_train, y_train)
+    pipe.fit(Xtrain_used, ytrain_used)
 
     if hasattr(pipe.named_steps["clf"], "predict_proba"):
         y_score = pipe.predict_proba(X_test)[:, 1]
@@ -865,12 +891,23 @@ for name, clf in models.items():
     auc_val = roc_auc_score(y_test, y_score)
     ax.plot(fpr, tpr, lw=2, label=f"{name} (AUC={auc_val:.3f})")
 
-ax.plot([0,1], [0,1], "--", lw=1.2, label="Baseline")
-ax.set_title("ROC Curve – Churn (anti-leakage)")
-ax.set_xlabel("False Positive Rate"); ax.set_ylabel("True Positive Rate")
-ax.legend(loc="lower right"); ax.grid(alpha=0.3, linestyle="--")
+    y_pred = (y_score >= ui_thr).astype(int)
+    rows.append([
+        name, auc_val,
+        accuracy_score(y_test, y_pred),
+        precision_score(y_test, y_pred, zero_division=0),
+        recall_score(y_test, y_pred, zero_division=0),
+        f1_score(y_test, y_pred, zero_division=0),
+        confusion_matrix(y_test, y_pred).tolist()
+    ])
 
-st.pyplot(fig)
+ax.plot([0, 1], [0, 1], ls="--", lw=1.2, color="gray", label="Baseline")
+ax.set_title("ROC Curve – Churn (anti-leakage)")
+ax.set_xlabel("False Positive Rate")
+ax.set_ylabel("True Positive Rate")
+ax.legend(loc="lower right", frameon=False)
+ax.grid(alpha=0.3, linestyle="--")
+st.pyplot(fig, use_container_width=True)
 
 # Tabel ringkas metrik
 result_df = pd.DataFrame(rows, columns=["Model","ROC_AUC","Accuracy","Precision","Recall","F1","ConfusionMatrix"])\
@@ -898,6 +935,17 @@ X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=test_size, stratify=y, random_state=seed
 )
 
+Xtrain_used, ytrain_used = X_train, y_train
+if FAST:
+    from sklearn.utils import resample
+    Xtrain_used, ytrain_used = resample(
+        X_train, y_train,
+        replace=False,
+        n_samples=max(1000, int(SUBSAMPLE * len(X_train))),
+        stratify=y_train,
+        random_state=seed
+    )
+
 # 1) Preprocessor (satu-satunya yang dipakai semua model)
 num_cols = X_train.select_dtypes(include=["int64","float64","int32","float32"]).columns.tolist()
 cat_cols = X_train.select_dtypes(include=["object","category","bool"]).columns.tolist()
@@ -914,17 +962,22 @@ preprocessor = ColumnTransformer(
 
 # 2) Definisikan SEMUA pipeline model (supaya seragam & anti-leakage)
 models = {
-    "Dummy(stratified)": DummyClassifier(strategy="stratified", random_state=seed),
     "LogReg": LogisticRegression(max_iter=1000, class_weight="balanced", random_state=seed),
-    "SVM-RBF": SVC(kernel="rbf", gamma="scale", C=1.0, probability=True, class_weight="balanced", random_state=seed),
+    "SVM-RBF": SVC(kernel="rbf", C=1.0, gamma="scale", class_weight="balanced", probability=False, random_state=seed),
     "DecisionTree": DecisionTreeClassifier(random_state=seed, class_weight="balanced"),
-    "RandomForest": RandomForestClassifier(n_estimators=300, random_state=seed, n_jobs=-1, class_weight="balanced_subsample"),
-    "XGBoost": XGBClassifier(
-        n_estimators=400, max_depth=5, learning_rate=0.05,
+    "RandomForest": RandomForestClassifier(
+        n_estimators=150 if FAST else 300,
+        random_state=seed, n_jobs=-1, class_weight="balanced_subsample"
+    ),
+}
+if INCLUDE_XGB and HAS_XGB:
+    models["XGBoost"] = XGBClassifier(
+        n_estimators=300 if FAST else 400,
+        max_depth=5, learning_rate=0.05,
         subsample=0.9, colsample_bytree=0.9, reg_lambda=1.0,
         random_state=seed, n_jobs=-1, eval_metric="logloss", tree_method="hist"
-    ) if HAS_XGB else None,
-}
+    )
+    
 # drop the None when XGB isn't available
 models = {k: v for k, v in models.items() if v is not None}
 
@@ -937,10 +990,10 @@ results = []
 trained = {}
 
 for name, pipe in pipelines.items():
-    pipe.fit(X_train, y_train)
+    pipe.fit(Xtrain_used, ytrain_used)
     trained[name] = pipe
     y_proba = pipe.predict_proba(X_test)[:, 1]
-    y_pred  = (y_proba >= thr).astype(int)
+    y_pred  = (y_proba >= ui_thr).astype(int)
 
     auc  = roc_auc_score(y_test, y_proba)
     acc  = (y_pred == y_test).mean()
@@ -975,10 +1028,11 @@ plt.legend(loc="lower right"); plt.grid(alpha=0.3, linestyle="--"); plt.tight_la
 st.pyplot(fig)
 
 # 5) (Opsional) Paksa visualisasi khusus XGBoost pakai model yang SAMA
-xgb_pipe = trained["XGBoost"]  # ini pipeline persis yang dipakai di tabel
-y_score_xgb = xgb_pipe.predict_proba(X_test)[:, 1]
-auc_xgb = roc_auc_score(y_test, y_score_xgb)
-st.write(f"AUC XGBoost (harus match tabel): {auc_xgb:.6f}")
+if HAS_XGB and "XGBoost" in trained:
+    xgb_pipe = trained["XGBoost"]
+    y_score_xgb = xgb_pipe.predict_proba(X_test)[:, 1]
+    auc_xgb = roc_auc_score(y_test, y_score_xgb)
+    st.write(f"AUC XGBoost (harus match tabel): {auc_xgb:.6f}")
 
 """#Hyperparameter Tuning"""
 
@@ -1007,7 +1061,7 @@ preprocess = ColumnTransformer([
 # Definisikan model + ruang hyperparameter
 pipe_base = Pipeline([("prep", preprocess), ("clf", LogisticRegression())])  # placeholder, akan diganti di search
 
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed)
+cv = StratifiedKFold(n_splits=CV_K, shuffle=True, random_state=seed)
 scoring = "roc_auc"
 n_iter = 30  # naikkan kalau mau lebih teliti
 
@@ -1092,63 +1146,122 @@ search_spaces = {
     }
 }
 
-results = []
-best_fitted = {}
+thr = ui_thr  # pakai slider threshold yang sudah ada
 
-for name, spec in search_spaces.items():
-    st.write(f"\n>>> HalvingRandomSearch (FAST) {name} ...")
-    pipe = Pipeline([("prep", preprocess), ("clf", spec["estimator"])])
-    hrs = HalvingRandomSearchCV(
-        estimator=pipe,
-        param_distributions=spec["params"],
-        factor=4,
-        resource="n_samples",
-        min_resources=max(1000, int(0.2*len(X_tune))),
-        max_resources=len(X_tune),
-        scoring="roc_auc",
-        cv=cv_fast,
-        random_state=seed,
-        n_jobs=1,
-        verbose=1
-    )
-    hrs.fit(X_tune, y_tune)
-    results.append({"Model": name, "CV_ROC_AUC": hrs.best_score_, "BestParams": hrs.best_params_})
-    best_fitted[name] = hrs.best_estimator_
-    st.write(f"Best CV AUC ({name}) = {hrs.best_score_:.3f}")
+if RUN_TUNING:
+    results = []
+    best_fitted = {}
 
-results_df = pd.DataFrame(results).sort_values("CV_ROC_AUC", ascending=False)
-st.write("\n FAST Halving results")
-st.write(results_df.to_string(index=False))
+    for name, spec in search_spaces.items():
+        st.write(f"\n>>> HalvingRandomSearch (FAST) {name} ...")
+        pipe = Pipeline([("prep", preprocess), ("clf", spec["estimator"])])
 
-# Refit pemenang di FULL training set (bukan subset)
-best_name = results_df.iloc[0]["Model"]
-best_model = best_fitted[best_name]
-best_model.fit(X_train, y_train)
+        hrs = HalvingRandomSearchCV(
+            estimator=pipe,
+            param_distributions=spec["params"],
+            factor=4,
+            resource="n_samples",
+            min_resources=max(1000, int(0.2 * len(X_tune))),
+            max_resources=len(X_tune),
+            scoring="roc_auc",
+            cv=cv_fast,
+            random_state=seed,
+            n_jobs=1,
+            verbose=1,
+        )
+        hrs.fit(X_tune, y_tune)
 
-# Evaluasi test
-if hasattr(best_model.named_steps["clf"], "predict_proba"):
-    y_score = best_model.predict_proba(X_test)[:,1]
+        results.append({
+            "Model": name,
+            "CV_ROC_AUC": hrs.best_score_,
+            "BestParams": hrs.best_params_,
+        })
+        best_fitted[name] = hrs.best_estimator_
+        st.write(f"Best CV AUC ({name}) = {hrs.best_score_:.3f}")
+
+    results_df = pd.DataFrame(results).sort_values("CV_ROC_AUC", ascending=False)
+    st.write("\n FAST Halving results")
+    st.write(results_df.to_string(index=False))
+
+    # --- Refit pemenang di FULL train & evaluasi test ---
+    best_name  = results_df.iloc[0]["Model"]
+    best_model = best_fitted[best_name]
+    best_model.fit(X_train, y_train)
+
+    # skor & prediksi
+    if hasattr(best_model.named_steps["clf"], "predict_proba"):
+        y_score = best_model.predict_proba(X_test)[:, 1]
+    else:
+        dec = best_model.decision_function(X_test)
+        y_score = (dec - dec.min()) / (dec.max() - dec.min() + 1e-9)
+    y_pred = (y_score >= thr).astype(int)
+
+    # metrik
+    st.write(f"\n Test metrics ({best_name})")
+    st.write(f"AUC : {roc_auc_score(y_test, y_score):.3f}")
+    st.write(f"ACC : {accuracy_score(y_test, y_pred):.3f}")
+    st.write(f"PRE : {precision_score(y_test, y_pred, zero_division=0):.3f}")
+    st.write(f"REC : {recall_score(y_test, y_pred, zero_division=0):.3f}")
+    st.write(f"F1  : {f1_score(y_test, y_pred, zero_division=0):.3f}")
+
+    # ROC
+    fpr, tpr, _ = roc_curve(y_test, y_score)
+    fig, ax = plt.subplots(figsize=(6,4))
+    plt.plot(fpr, tpr, lw=2, label=f"{best_name}")
+    plt.plot([0,1],[0,1], "--", lw=1.2, label="Baseline")
+    plt.title("ROC – Best Model (FAST Halving)")
+    plt.xlabel("FPR"); plt.ylabel("TPR")
+    plt.legend(); plt.grid(alpha=0.3, linestyle="--")
+    plt.tight_layout(); st.pyplot(fig)
+
 else:
-    dec = best_model.decision_function(X_test)
-    y_score = (dec - dec.min())/(dec.max()-dec.min()+1e-9)
+    st.info("Hyperparameter tuning dimatikan (RUN_TUNING=False). Menjalankan evaluasi dengan model default (RandomForest).")
+
+    default_pipe = Pipeline([
+        ("prep", preprocess),
+        ("clf", RandomForestClassifier(
+            n_estimators=300,
+            random_state=seed,
+            n_jobs=-1,
+            class_weight="balanced_subsample",
+        ))
+    ])
+    default_pipe.fit(X_train, y_train)
+
+    if hasattr(default_pipe.named_steps["clf"], "predict_proba"):
+        y_score = default_pipe.predict_proba(X_test)[:, 1]
+    else:
+        dec = default_pipe.decision_function(X_test)
+        y_score = (dec - dec.min()) / (dec.max() - dec.min() + 1e-9)
+    y_pred = (y_score >= thr).astype(int)
+
+    st.write("\n Test metrics (RandomForest default)")
+    st.write(f"AUC : {roc_auc_score(y_test, y_score):.3f}")
+    st.write(f"ACC : {accuracy_score(y_test, y_pred):.3f}")
+    st.write(f"PRE : {precision_score(y_test, y_pred, zero_division=0):.3f}")
+    st.write(f"REC : {recall_score(y_test, y_pred, zero_division=0):.3f}")
+    st.write(f"F1  : {f1_score(y_test, y_pred, zero_division=0):.3f}")
+
+    # CM
+    cm = confusion_matrix(y_test, y_pred)
+    fig, ax = plt.subplots(figsize=(5.6,4.4))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+                xticklabels=["No Churn", "Churn"],
+                yticklabels=["No Churn", "Churn"])
+    plt.title("Confusion Matrix – RandomForest (default)")
+    plt.xlabel("Predicted"); plt.ylabel("Actual")
+    plt.tight_layout(); st.pyplot(fig)
+
+    # ROC
+    fpr, tpr, _ = roc_curve(y_test, y_score)
+    fig, ax = plt.subplots(figsize=(6,4))
+    plt.plot(fpr, tpr, lw=2, label="RandomForest")
+    plt.plot([0,1],[0,1], "--", lw=1.2, label="Baseline")
+    plt.title("ROC – RandomForest (default)")
+    plt.xlabel("FPR"); plt.ylabel("TPR")
+    plt.legend(); plt.grid(alpha=0.3, linestyle="--")
+    plt.tight_layout(); st.pyplot(fig)
     
-y_pred = (y_score >= thr).astype(int)
-
-st.write(f"\n Test metrics ({best_name})")
-st.write(f"AUC : {roc_auc_score(y_test, y_score):.3f}")
-st.write(f"ACC : {accuracy_score(y_test, y_pred):.3f}")
-st.write(f"PRE : {precision_score(y_test, y_pred, zero_division=0):.3f}")
-st.write(f"REC : {recall_score(y_test, y_pred, zero_division=0):.3f}")
-st.write(f"F1  : {f1_score(y_test, y_pred, zero_division=0):.3f}")
-
-# (opsional) ROC plot
-fpr, tpr, _ = roc_curve(y_test, y_score)
-fig, ax = plt.subplots(figsize=(6,4))
-plt.plot(fpr, tpr, lw=2, label=f"{best_name}")
-plt.plot([0,1],[0,1],"--", lw=1.2)
-plt.title("ROC – Best Model (FAST Halving)"); plt.xlabel("FPR"); plt.ylabel("TPR")
-plt.legend(); plt.grid(alpha=0.3, linestyle="--"); plt.tight_layout(); st.pyplot(fig)
-
 """Hasil ROC RF lebih baik karena:
   - Plot multi-model yang AUC XGBoost = 0.858 itu kemungkinan dari default parameters atau tuning manual yang udah optimal.
   - Plot Hyperparameter Tuning (FAST Halving) ini hasilnya Random Forest yang keluar sebagai “best model” karena tuning process-nya menemukan kombinasi parameter RF yang performanya lebih tinggi dari parameter XGBoost yang dicoba waktu tuning.
@@ -1209,15 +1322,15 @@ if HAS_XGB:
 """
 
 # Evaluasi: CV (ROC-AUC) + Test metrics
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed)
+cv = StratifiedKFold(n_splits=CV_K, shuffle=True, random_state=seed)
 rows, fitted = [], {}
 
 for name, clf in models.items():
   pipe = Pipeline([("prep", preprocess), ("clf", clf)])
 
   # CV ROC-AUC di training
-  cv_auc = cross_val_score(pipe, X_train, y_train, cv=cv, scoring="roc_auc", n_jobs=1)
-  pipe.fit(X_train, y_train)
+  cv_auc = cross_val_score(pipe, Xtrain_used, ytrain_used, cv=cv, scoring="roc_auc", n_jobs=1)
+  pipe.fit(Xtrain_used, ytrain_used)
 
   # Skor probabilitas untuk test AUC
   if hasattr(pipe.named_steps["clf"], "predict_proba"):
@@ -1328,7 +1441,7 @@ pipe = Pipeline([
   ))
 ])
 
-pipe.fit(X_train, y_train)
+pipe.fit(Xtrain_used, ytrain_used)
 
 # Ringkasan metrik + Confusion Matrix
 if hasattr(pipe.named_steps["clf"], "predict_proba"):
@@ -1370,14 +1483,16 @@ except NameError:
     y_score = (dec - dec.min()) / (dec.max() - dec.min() + 1e-9)
 
 # ROC Curve + Youden point
-fpr, tpr, thr_roc = roc_curve(y_test, y_score)
+fpr, tpr, thresholds_roc = roc_curve(y_test, y_score)
 youden_idx = np.argmax(tpr - fpr)
-thr_youden = float(thr_roc[youden_idx])
+thr_youden = float(thresholds_roc[youden_idx])
 auc_val = roc_auc_score(y_test, y_score)
 
 # Youden's J statistic: tpr - fpr
+fpr, tpr, thresholds_roc = roc_curve(y_test, y_score)
 youden_idx = np.argmax(tpr - fpr)
-thr_youden = float(thr[youden_idx])
+thr_youden = float(thresholds_roc[youden_idx])
+auc_val = roc_auc_score(y_test, y_score)
 
 fig, ax = plt.subplots(figsize=(6.2, 5.2))
 plt.plot(fpr, tpr, lw=2, label=f"Model (AUC={auc_val:.3f})")
@@ -1609,7 +1724,6 @@ st.pyplot(fig)
 """
 
 # Lift & Cumulative Gain (butuh scikit-plot)
-
 # Helper ambil skor positif dari pipeline/model apa pun
 def get_positive_scores(estimator, X):
   "Skor probabilitas kelas positif (churn=1) untuk berbagai model."
@@ -1679,11 +1793,12 @@ rows.append([
     f1_score(y_test, y_pred, zero_division=0),
     confusion_matrix(y_test, y_pred).tolist()
 ])
+lift_rows = []
 for d in deciles:
-  k = int(np.ceil(d * n))
-  caught = y_sorted[:k].sum()
-  gain = caught / pos
-  rows.append([int(d*100), k, caught, gain])
+    k = int(np.ceil(d * n))
+    caught = y_sorted[:k].sum()
+    gain = caught / pos
+    lift_rows.append([int(d*100), k, caught, gain])
     
 lift_table = pd.DataFrame(rows, columns=["% Sampel", "N Ditarget", "Churn Tertangkap", "Cumulative Gain"])
 st.write("\n Tabel Gain per-Decile")
@@ -1783,14 +1898,6 @@ else:
 5. Paket Khusus Generasi Muda
   - Mobile banking dengan gamifikasi dan promo lifestyle (misalnya diskon makan/minum).
 """
-
-# IDENTIFIKASI FAKTOR KUNCI
-
-try:
-  from xgboost import XGBClassifier
-  HAS_XGB = True
-except Exception:
-  HAS_XGB = False
 
 # ambil komponen pipeline & nama fitur setelah transform
 prep = pipe.named_steps["prep"]
