@@ -1015,13 +1015,28 @@ pipelines = {
 }
 
 # 3) Train SEMUA pipeline SEKALI, simpan hasil & modelnya
+def get_positive_scores(pipe, X):
+    if hasattr(pipe.named_steps["clf"], "predict_proba"):
+        proba = pipe.predict_proba(X)
+        proba = np.asarray(proba)
+        if proba.ndim == 2:
+            if hasattr(pipe.named_steps["clf"], "classes_") and 1 in pipe.named_steps["clf"].classes_:
+                idx = list(pipe.named_steps["clf"].classes_).index(1)
+                return proba[:, idx]
+            return proba[:, -1]
+        return proba.ravel()
+    if hasattr(pipe.named_steps["clf"], "decision_function"):
+        dec = np.asarray(pipe.decision_function(X)).ravel()
+        return (dec - dec.min()) / (dec.max() - dec.min() + 1e-9)
+    return pipe.predict(X).astype(float)
+
 results = []
 trained = {}
 
 for name, pipe in pipelines.items():
     pipe.fit(Xtrain_used, ytrain_used)
     trained[name] = pipe
-    y_proba = pipe.predict_proba(X_test)[:, 1]
+    y_proba = get_positive_scores(pipe, X_test)
     y_pred  = (y_proba >= ui_thr).astype(int)
 
     auc  = roc_auc_score(y_test, y_proba)
