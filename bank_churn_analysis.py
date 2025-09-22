@@ -41,6 +41,16 @@ try:
 except Exception:
     HAS_XGB = False
 
+from sklearn.preprocessing import OneHotEncoder
+
+def OHE_dense(**kwargs):
+    # scikit-learn >= 1.4
+    try:
+        return OneHotEncoder(sparse_output=False, **kwargs)
+    # scikit-learn <= 1.3
+    except TypeError:
+        return OneHotEncoder(sparse=False, **kwargs)
+
 pd.set_option('display.max_columns', 100)
 
 """# Load Dataset"""
@@ -639,7 +649,7 @@ numeric_pipeline = Pipeline(steps=[
 # Untuk jaga-jaga, kita gunakan 'constant' -> 'Unknown' agar selalu aman.
 categorical_pipeline = Pipeline(steps=[
   ("imputer", SimpleImputer(strategy="constant", fill_value="Unknown")),
-  ("onehot", OneHotEncoder(handle_unknown="ignore", sparse=False))
+  ("onehot", OHE_dense(handle_unknown="ignore"))
 ])
 
 """- Tujuan → Menangani kolom kategorikal yang punya missing value.
@@ -676,7 +686,7 @@ numeric_pipeline = Pipeline(steps=[
 # Untuk jaga-jaga, kita gunakan 'constant' -> 'Unknown' agar selalu aman.
 categorical_pipeline = Pipeline(steps=[
   ("imputer", SimpleImputer(strategy="constant", fill_value="Unknown")),
-  ("onehot", OneHotEncoder(handle_unknown="ignore", sparse=False))
+  ("onehot", OHE_dense(handle_unknown="ignore"))
 ])
 
 # Gabungkan
@@ -741,7 +751,7 @@ numeric_pipeline = Pipeline(steps=[
 # Pipeline kategorikal: imputasi 'Unknown' + OneHot
 categorical_pipeline = Pipeline(steps=[
   ("imputer", SimpleImputer(strategy="constant", fill_value="Unknown")),
-  ("onehot", OneHotEncoder(handle_unknown="ignore", sparse=False))
+  ("onehot", OHE_dense(handle_unknown="ignore"))
 ])
 
 # Gabung semua
@@ -837,7 +847,7 @@ num_pipe = Pipeline([
 ])
 cat_pipe = Pipeline([
   ("imp", SimpleImputer(strategy="constant", fill_value="Unknown")),
-  ("oh", OneHotEncoder(handle_unknown="ignore", sparse=False))
+  ("oh", OHE_dense(handle_unknown="ignore"))
 ])
 
 preprocess = ColumnTransformer([
@@ -974,7 +984,7 @@ preprocessor = ColumnTransformer(
         ("num", Pipeline([("imp", SimpleImputer(strategy="median")),
                           ("sc", StandardScaler())]), num_cols),
         ("cat", Pipeline([("imp", SimpleImputer(strategy="constant", fill_value="Unknown")),
-                          ("oh", OneHotEncoder(handle_unknown="ignore", sparse=False))]), cat_cols),
+                          ("oh", OHE_dense(handle_unknown="ignore"))]), cat_cols),
     ],
     remainder="drop"
 )
@@ -1070,7 +1080,7 @@ cat_cols = X_train.select_dtypes(include=["object","category","bool"]).columns.t
 num_pipe = Pipeline([("imp", SimpleImputer(strategy="median")),
   ("sc", StandardScaler())])
 cat_pipe = Pipeline([("imp", SimpleImputer(strategy="constant", fill_value="Unknown")),
-  ("oh", OneHotEncoder(handle_unknown="ignore", sparse=False))])
+  ("oh", OHE_dense(handle_unknown="ignore"))])
 
 preprocess = ColumnTransformer([
   ("num", num_pipe, num_cols),
@@ -1308,7 +1318,7 @@ cat_cols = X_train.select_dtypes(include=["object","category","bool"]).columns.t
 num_pipe = Pipeline([("imp", SimpleImputer(strategy="median")),
   ("sc", StandardScaler())])
 cat_pipe = Pipeline([("imp", SimpleImputer(strategy="constant", fill_value="Unknown")),
-  ("oh", OneHotEncoder(handle_unknown="ignore", sparse=False))])
+  ("oh", OHE_dense(handle_unknown="ignore"))])
 
 preprocess = ColumnTransformer([
   ("num", num_pipe, num_cols),
@@ -1445,7 +1455,7 @@ num_cols = X_train.select_dtypes(include=["int64","float64","int32","float32"]).
 cat_cols = X_train.select_dtypes(include=["object","category","bool"]).columns.tolist()
 
 num_pipe = Pipeline([("imp", SimpleImputer(strategy="median")), ("sc", StandardScaler())])
-cat_pipe = Pipeline([("imp", SimpleImputer(strategy="constant", fill_value="Unknown")), ("oh", OneHotEncoder(handle_unknown="ignore", sparse=False))])
+cat_pipe = Pipeline([("imp", SimpleImputer(strategy="constant", fill_value="Unknown")), ("oh", OHE_dense(handle_unknown="ignore"))])
 
 preprocess = ColumnTransformer([
   ("num", num_pipe, num_cols),
