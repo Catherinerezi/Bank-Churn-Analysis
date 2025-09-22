@@ -172,6 +172,25 @@ X = df.drop(["Exited"], axis=1)
 y = df["Exited"]
 
 # 2. Split data menjadi train dan test set (stratify agar distribusi Churn seimbang di kedua set)
+X = df.drop(["Exited"], axis=1)
+y = df["Exited"]
+
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=test_size, stratify=y, random_state=seed
+)
+
+Xtrain_used, ytrain_used = X_train, y_train
+if FAST:
+    from sklearn.utils import resample
+    Xtrain_used, ytrain_used = resample(
+        X_train, y_train,
+        replace=False,
+        n_samples=max(1000, int(SUBSAMPLE * len(X_train))),
+        stratify=y_train,
+        random_state=seed
+    )
+
 Xtrain_used, ytrain_used = X_train, y_train
 if FAST:
     from sklearn.utils import resample
@@ -620,7 +639,7 @@ numeric_pipeline = Pipeline(steps=[
 # Untuk jaga-jaga, kita gunakan 'constant' -> 'Unknown' agar selalu aman.
 categorical_pipeline = Pipeline(steps=[
   ("imputer", SimpleImputer(strategy="constant", fill_value="Unknown")),
-  ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
+  ("onehot", OneHotEncoder(handle_unknown="ignore", sparse=False))
 ])
 
 """- Tujuan → Menangani kolom kategorikal yang punya missing value.
@@ -657,7 +676,7 @@ numeric_pipeline = Pipeline(steps=[
 # Untuk jaga-jaga, kita gunakan 'constant' -> 'Unknown' agar selalu aman.
 categorical_pipeline = Pipeline(steps=[
   ("imputer", SimpleImputer(strategy="constant", fill_value="Unknown")),
-  ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
+  ("onehot", OneHotEncoder(handle_unknown="ignore", sparse=False))
 ])
 
 # Gabungkan
@@ -722,7 +741,7 @@ numeric_pipeline = Pipeline(steps=[
 # Pipeline kategorikal: imputasi 'Unknown' + OneHot
 categorical_pipeline = Pipeline(steps=[
   ("imputer", SimpleImputer(strategy="constant", fill_value="Unknown")),
-  ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
+  ("onehot", OneHotEncoder(handle_unknown="ignore", sparse=False))
 ])
 
 # Gabung semua
@@ -803,7 +822,7 @@ Apa yang dilakukan kode dibawah?
     - StandardScaler() → skala ke mean≈0, std≈1 (bagus buat model seperti logreg/SVM)
   - cat_pipe:
     - SimpleImputer(fill_value="Unknown") → isi kategori yang hilang jadi “Unknown” (jelas dan eksplisit)
-    - OneHotEncoder(handle_unknown="ignore", sparse_output=False) → ubah kategori jadi kolom 0/1; kalau ada kategori baru saat test, diabaikan (tidak error)
+    - OneHotEncoder(handle_unknown="ignore", sparse=False) → ubah kategori jadi kolom 0/1; kalau ada kategori baru saat test, diabaikan (tidak error)
 - Satukan keduanya dengan ColumnTransformer:
   - Artinya: saat transform, kolom numerik diproses oleh num_pipe, kolom kategori oleh cat_pipe, sisanya dibuang (remainder="drop").
 """
@@ -818,7 +837,7 @@ num_pipe = Pipeline([
 ])
 cat_pipe = Pipeline([
   ("imp", SimpleImputer(strategy="constant", fill_value="Unknown")),
-  ("oh", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
+  ("oh", OneHotEncoder(handle_unknown="ignore", sparse=False))
 ])
 
 preprocess = ColumnTransformer([
@@ -955,7 +974,7 @@ preprocessor = ColumnTransformer(
         ("num", Pipeline([("imp", SimpleImputer(strategy="median")),
                           ("sc", StandardScaler())]), num_cols),
         ("cat", Pipeline([("imp", SimpleImputer(strategy="constant", fill_value="Unknown")),
-                          ("oh", OneHotEncoder(handle_unknown="ignore", sparse_output=False))]), cat_cols),
+                          ("oh", OneHotEncoder(handle_unknown="ignore", sparse=False))]), cat_cols),
     ],
     remainder="drop"
 )
@@ -1051,7 +1070,7 @@ cat_cols = X_train.select_dtypes(include=["object","category","bool"]).columns.t
 num_pipe = Pipeline([("imp", SimpleImputer(strategy="median")),
   ("sc", StandardScaler())])
 cat_pipe = Pipeline([("imp", SimpleImputer(strategy="constant", fill_value="Unknown")),
-  ("oh", OneHotEncoder(handle_unknown="ignore", sparse_output=False))])
+  ("oh", OneHotEncoder(handle_unknown="ignore", sparse=False))])
 
 preprocess = ColumnTransformer([
   ("num", num_pipe, num_cols),
@@ -1289,7 +1308,7 @@ cat_cols = X_train.select_dtypes(include=["object","category","bool"]).columns.t
 num_pipe = Pipeline([("imp", SimpleImputer(strategy="median")),
   ("sc", StandardScaler())])
 cat_pipe = Pipeline([("imp", SimpleImputer(strategy="constant", fill_value="Unknown")),
-  ("oh", OneHotEncoder(handle_unknown="ignore", sparse_output=False))])
+  ("oh", OneHotEncoder(handle_unknown="ignore", sparse=False))])
 
 preprocess = ColumnTransformer([
   ("num", num_pipe, num_cols),
@@ -1426,7 +1445,7 @@ num_cols = X_train.select_dtypes(include=["int64","float64","int32","float32"]).
 cat_cols = X_train.select_dtypes(include=["object","category","bool"]).columns.tolist()
 
 num_pipe = Pipeline([("imp", SimpleImputer(strategy="median")), ("sc", StandardScaler())])
-cat_pipe = Pipeline([("imp", SimpleImputer(strategy="constant", fill_value="Unknown")), ("oh", OneHotEncoder(handle_unknown="ignore", sparse_output=False))])
+cat_pipe = Pipeline([("imp", SimpleImputer(strategy="constant", fill_value="Unknown")), ("oh", OneHotEncoder(handle_unknown="ignore", sparse=False))])
 
 preprocess = ColumnTransformer([
   ("num", num_pipe, num_cols),
