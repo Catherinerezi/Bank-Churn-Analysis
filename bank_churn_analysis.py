@@ -43,6 +43,11 @@ if uploaded is None:
 else:
     df = pd.read_csv(uploaded)
 
+uploaded = st.sidebar.file_uploader("Upload CSV", type=["csv"])
+test_size = st.sidebar.slider("Test size", 0.1, 0.4, 0.2, 0.05)
+seed = st.sidebar.number_input("Random state (SEED)", min_value=0, value=42, step=1)
+thr = st.sidebar.slider("Threshold prediksi (positif = churn)", 0.01, 0.99, 0.50, 0.01)
+
 """#Eksplorasi Data
 
 ##Data Understanding
@@ -84,18 +89,18 @@ for col in num_float_cols:
   df_typed[col] = pd.to_numeric(df_typed[col], downcast="float")
 
 # 5) Cek hasil
-print("Dtypes sebelum:\n", df.dtypes, "\n")
-print("Dtypes sesudah:\n", df_typed.dtypes, "\n")
+st.write("Dtypes sebelum:\n", df.dtypes, "\n")
+st.write("Dtypes sesudah:\n", df_typed.dtypes, "\n")
 
 # 6) Ringkas memori hemat vs asli
 mem_before = df.memory_usage(deep=True).sum() / (1024**2)
 mem_after  = df_typed.memory_usage(deep=True).sum() / (1024**2)
-print(f"Memori sebelum: {mem_before:.2f} MB")
-print(f"Memori sesudah: {mem_after:.2f} MB")
+st.write(f"Memori sebelum: {mem_before:.2f} MB")
+st.write(f"Memori sesudah: {mem_after:.2f} MB")
 
 # 7) Tinjau beberapa baris
-print("\nContoh data (kolom kunci):")
-print(df_typed[["RowNumber","CustomerId","Surname","Geography","Gender","HasCrCard","IsActiveMember","Exited"]].head())
+st.write("\nContoh data (kolom kunci):")
+st.write(df_typed[["RowNumber","CustomerId","Surname","Geography","Gender","HasCrCard","IsActiveMember","Exited"]].head())
 
 #Periksa nilai yang hilang (jumlah & persentase)
 missing_summary = pd.DataFrame({
@@ -103,16 +108,16 @@ missing_summary = pd.DataFrame({
   "Persentase_NA(%)": (df.isnull().mean() * 100).round(2)
 })
 
-print("Ringkasan Missing Values:")
-print(missing_summary)
+st.write("Ringkasan Missing Values:")
+st.write(missing_summary)
 
 # Opsional: filter hanya kolom yang punya missing values
 missing_only = missing_summary[missing_summary["Jumlah_NA"] > 0]
 if missing_only.empty:
-  print("\n Tidak ada nilai yang hilang di dataset ini.")
+  st.write("\n Tidak ada nilai yang hilang di dataset ini.")
 else:
-  print("\n Kolom dengan nilai hilang:")
-  print(missing_only)
+  st.write("\n Kolom dengan nilai hilang:")
+  st.write(missing_only)
 
 # Pilih hanya kolom numerik
 numeric_cols = df.select_dtypes(include=["int64", "float64"]).columns
@@ -126,21 +131,21 @@ stat_desc = pd.DataFrame({
   "Q3": df[numeric_cols].quantile(0.75)
 })
 
-print("Statistik Deskriptif Variabel Numerik:")
+st.write("Statistik Deskriptif Variabel Numerik:")
 stat_desc
 
 # Pilih kolom kategorikal (tipe object atau category)
 cat_cols = df.select_dtypes(include=["object"]).columns
 
-print("Kolom kategorikal:", list(cat_cols), "\n")
+st.write("Kolom kategorikal:", list(cat_cols), "\n")
 
 # Loop untuk setiap kolom kategorikal
 for col in cat_cols:
-  print(f"Distribusi kategori untuk: {col}")
-  print(df[col].value_counts())
-  print("\nPersentase:")
-  print((df[col].value_counts(normalize=True) * 100).round(2))
-  print("-" * 40)
+  st.write(f"Distribusi kategori untuk: {col}")
+  st.write(df[col].value_counts())
+  st.write("\nPersentase:")
+  st.write((df[col].value_counts(normalize=True) * 100).round(2))
+  st.write("-" * 40)
 
 # 1. Pisahkan fitur (X) dan target (y)
 X = df.drop(["Exited"], axis=1)
