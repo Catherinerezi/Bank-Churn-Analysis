@@ -1412,24 +1412,25 @@ Selain itu, XGBoost menggabungkan kekuatan boosting dengan pengaturan regulasi y
 """
 
 # Plot ROC untuk 3 model teratas
-top_k = results_df["Model"].head(3).tolist()
-fig, ax = plt.subplots(figsize=(7,4))
-for name in top_k:
-  pipe = fitted[name]
-  if hasattr(pipe.named_steps["clf"], "predict_proba"):
-    y_score = pipe.predict_proba(X_test)[:, 1]
-  else:
-    dec = pipe.decision_function(X_test)
-    y_score = (dec - dec.min()) / (dec.max() - dec.min() + 1e-9)
-  fpr, tpr, _ = roc_curve(y_test, y_score)
-  auc_val = roc_auc_score(y_test, y_score)
-  plt.plot(fpr, tpr, lw=2, label=f"{name} (AUC={auc_val:.3f})")
+top_k = [m for m in results_df["Model"].head(3).tolist() if m in fitted]
 
-plt.plot([0,1],[0,1], "--", lw=1.2, label="Baseline")
+fig, ax = plt.subplots(figsize=(7, 4))
+for name in top_k:
+    pipe = fitted[name]
+    y_score = get_positive_scores(pipe, X_test)
+    fpr, tpr, _ = roc_curve(y_test, y_score)
+    auc_val = roc_auc_score(y_test, y_score)
+    plt.plot(fpr, tpr, lw=2, label=f"{name} (AUC={auc_val:.3f})")
+
+plt.plot([0, 1], [0, 1], "--", lw=1.2, label="Baseline")
 plt.title("ROC Curve – Top 3 Model")
-plt.xlabel("False Positive Rate"); plt.ylabel("True Positive Rate")
-plt.legend(loc="lower right"); plt.grid(alpha=0.3, linestyle="--"); plt.tight_layout()
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.legend(loc="lower right")
+plt.grid(alpha=0.3, linestyle="--")
+plt.tight_layout()
 st.pyplot(fig)
+plt.close(fig)
 
 """#Interpretasi dan Wawasan
 
@@ -1827,25 +1828,19 @@ st.pyplot(fig)
 # Tabel per-decile untuk laporan bisnis
 # Menunjukkan berapa % churn tertangkap jika menargetkan top 10%, 20%, ... dari skor
 deciles = np.linspace(0.1, 1.0, 10)
-y_pred = (y_score >= thr).astype(int)
-rows.append([
-    name,
-    auc_val,
-    accuracy_score(y_test, y_pred),
-    precision_score(y_test, y_pred, zero_division=0),
-    recall_score(y_test, y_pred, zero_division=0),
-    f1_score(y_test, y_pred, zero_division=0),
-    confusion_matrix(y_test, y_pred).tolist()
-])
+
 lift_rows = []
 for d in deciles:
     k = int(np.ceil(d * n))
     caught = y_sorted[:k].sum()
     gain = caught / pos
-    lift_rows.append([int(d*100), k, caught, gain])
-    
-lift_table = pd.DataFrame(rows, columns=["% Sampel", "N Ditarget", "Churn Tertangkap", "Cumulative Gain"])
-st.write("\n Tabel Gain per-Decile")
+    lift_rows.append([int(d*100), k, int(caught), float(gain)])
+
+lift_table = pd.DataFrame(
+    lift_rows,
+    columns=["% Sampel", "N Ditarget", "Churn Tertangkap", "Cumulative Gain"]
+)
+st.write("\nTabel Gain per-Decile")
 st.write(lift_table.to_string(index=False, formatters={"Cumulative Gain": "{:.3f}".format}))
 
 """Interpretasinya jadi seperti ini:
