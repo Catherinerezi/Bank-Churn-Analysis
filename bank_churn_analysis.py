@@ -31,6 +31,10 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 
+from sklearn.experimental import enable_halving_search_cv
+from sklearn.model_selection import HalvingRandomSearchCV
+from sklearn.inspection import PartialDependenceDisplay
+
 pd.set_option('display.max_columns', 100)
 
 """# Load Dataset"""
@@ -38,22 +42,25 @@ pd.set_option('display.max_columns', 100)
 # load dataset ke raw_data
 st.sidebar.header("⚙️ Pengaturan")
 url_default = "https://raw.githubusercontent.com/hadimaster65555/dataset_for_teaching/refs/heads/main/dataset/bank_churn_dataset_2/Churn_Modelling.csv"
-if uploaded is None:
-    df = pd.read_csv(url_default)
-else:
-    df = pd.read_csv(uploaded)
+URL = url_default
 
 uploaded = st.sidebar.file_uploader("Upload CSV", type=["csv"])
 test_size = st.sidebar.slider("Test size", 0.1, 0.4, 0.2, 0.05)
 seed = st.sidebar.number_input("Random state (SEED)", min_value=0, value=42, step=1)
 thr = st.sidebar.slider("Threshold prediksi (positif = churn)", 0.01, 0.99, 0.50, 0.01)
 
+@st.cache_data
+def load_df(file):
+    if file is not None:
+        return pd.read_csv(file)
+    return pd.read_csv(URL)
+
+df = load_df(uploaded)
+
 """#Eksplorasi Data
 
 ##Data Understanding
 """
-
-df.info()
 
 df.shape
 
@@ -132,7 +139,7 @@ stat_desc = pd.DataFrame({
 })
 
 st.write("Statistik Deskriptif Variabel Numerik:")
-stat_desc
+st.dataframe(stat_desc)
 
 # Pilih kolom kategorikal (tipe object atau category)
 cat_cols = df.select_dtypes(include=["object"]).columns
@@ -168,12 +175,12 @@ train_data["Exited"] = y_train
 plot_data = X_train.copy()
 plot_data['Exited'] = y_train
 
-plt.figure(figsize=(6,4))
+fig, ax = plt.subplots(figsize=(6,4))
 sns.countplot(x="Exited", data=plot_data, palette="viridis") # Use plot_data
 plt.title("Distribusi Target Exited di Data Training")
 plt.xlabel("Exited")
 plt.ylabel("Jumlah")
-plt.show()
+st.pyplot(fig)
 
 # Persentase churn
 churn_rate = plot_data['Exited'].value_counts(normalize=True) * 100 # Use plot_data
@@ -196,7 +203,7 @@ corr = df_num.corr(method="spearman")
 mask = np.triu(np.ones_like(corr, dtype=bool), k=1)   # sembunyikan segitiga atas
 
 # 3) Plot heatmap
-plt.figure(figsize=(10, 8))
+fig, ax = plt.subplots(figsize=(10,8))
 sns.heatmap(
     corr,
     mask=mask,
@@ -209,7 +216,7 @@ sns.heatmap(
 )
 plt.title("Lower-Triangular Correlation Heatmap (Spearman)")
 plt.tight_layout()
-plt.show()
+st.pyplot(fig)
 
 # 4) (opsional) daftar korelasi fitur terhadap target, urut absolut
 target_corr = (
@@ -225,7 +232,7 @@ st.write(target_corr.head(15).to_string())
 """##Categorical Data vs Churn"""
 
 # Setup data
-target_col = "Churn"
+target_col = "Exited"
 df_train = X_train.copy()
 df_train[target_col] = y_train
 
@@ -300,7 +307,7 @@ for start in range(0, len(categorical_cols), BATCH):
         fig.delaxes(axes[k])
 
     plt.tight_layout()
-    plt.show()
+    st.pyplot(fig)
     plt.close(fig)
 
 # Setup data
@@ -346,7 +353,7 @@ for start in range(0, len(numeric_cols), BATCH):
         fig.delaxes(axes[k])
 
     plt.tight_layout()
-    plt.show()
+    st.pyplot(fig)
     plt.close(fig)
 
 """#Visualisasi Data"""
@@ -366,7 +373,7 @@ plt.title("EstimatedSalary vs Churn")
 plt.xlabel("Churn")
 plt.ylabel("EstimatedSalary")
 plt.tight_layout()
-plt.show()
+st.pyplot(fig)
 
 # Pastikan tipe target benar
 df["Exited"] = df["Exited"].astype(int)
@@ -387,7 +394,7 @@ for ax, col in zip(axes, vars_num):
   ax.set_xlabel(col); ax.set_ylabel("Density")
   ax.grid(True, linestyle="--", alpha=0.3)
 plt.tight_layout()
-plt.show()
+st.pyplot(fig)
 
 # BOX PLOT (berdampingan, 1 baris 3 kolom)
 fig, axes = plt.subplots(1, 3, figsize=(18, 4))
@@ -399,7 +406,7 @@ for ax, col in zip(axes, vars_num):
   ax.set_xlabel("Churn"); ax.set_ylabel(col)
   ax.grid(True, axis="y", linestyle="--", alpha=0.3)
 plt.tight_layout()
-plt.show()
+st.pyplot(fig)
 
 # SCATTER
 #- y = Exited dengan jitter kecil supaya titik tidak menumpuk di 0/1
@@ -417,7 +424,7 @@ for ax, col in zip(axes, vars_num):
   ax.set_yticks([0, 1]); ax.set_yticklabels(["Stay", "Churn"])
   ax.grid(True, linestyle="--", alpha=0.3)
 plt.tight_layout()
-plt.show()
+st.pyplot(fig)
 
 # Tambahkan label churn
 df["Exited_label"] = df["Exited"].map({0: "Stay", 1: "Churn"})
@@ -466,7 +473,7 @@ axes[1].text(
 )
 
 plt.tight_layout()
-plt.show()
+st.pyplot(fig)
 
 """#Rekayasa Fitur"""
 
@@ -743,7 +750,7 @@ y = df["Exited"].astype(int)
 
 # Split stratified (baru SETELAH ini semua transformasi dilakukan)
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=test_size, stratify=y, random_state=SEED
+    X, y, test_size=test_size, stratify=y, random_state=seed
 )
 
 # Sanity check: tidak ada baris identik di train & test
@@ -809,11 +816,11 @@ preprocess = ColumnTransformer([
 
 # Model yang akan dibandingkan
 models = {
-  "Dummy(stratified)": DummyClassifier(strategy="stratified", random_state=SEED),
-  "LogReg": LogisticRegression(max_iter=1000, class_weight="balanced", random_state=SEED),
-  "SVM-RBF": SVC(kernel="rbf", C=1.0, gamma="scale", class_weight="balanced", probability=True, random_state=SEED),
-  "DecisionTree": DecisionTreeClassifier(random_state=SEED, class_weight="balanced"),
-  "RandomForest": RandomForestClassifier(n_estimators=300, random_state=SEED, n_jobs=-1, class_weight="balanced_subsample")}
+  "Dummy(stratified)": DummyClassifier(strategy="stratified", random_state=seed),
+  "LogReg": LogisticRegression(max_iter=1000, class_weight="balanced", random_state=seed),
+  "SVM-RBF": SVC(kernel="rbf", C=1.0, gamma="scale", class_weight="balanced", probability=True, random_state=seed),
+  "DecisionTree": DecisionTreeClassifier(random_state=seed, class_weight="balanced"),
+  "RandomForest": RandomForestClassifier(n_estimators=300, random_state=seed, n_jobs=-1, class_weight="balanced_subsample")}
 
 # Check if XGBoost is available and add it to models if HAS_XGB is True
 try:
@@ -826,7 +833,7 @@ if HAS_XGB:
     models["XGBoost"] = XGBClassifier(
         n_estimators=400, max_depth=5, learning_rate=0.05,
         subsample=0.9, colsample_bytree=0.9, reg_lambda=1.0,
-        random_state=SEED, n_jobs=-1, eval_metric="logloss", tree_method="hist"
+        random_state=seed, n_jobs=-1, eval_metric="logloss", tree_method="hist"
     )
 
 """- Menyiapkan beberapa model yang berbeda untuk dibandingkan performanya dalam memprediksi churn.
@@ -871,11 +878,12 @@ for name, clf in models.items():
   plt.plot(fpr, tpr, lw=2, label=f"{name} (AUC={auc_val:.3f})")
 
 # baseline
+fig, ax = plt.subplots(figsize=(6,4))
 plt.plot([0,1],[0,1], linestyle="--", lw=1.2, label="Baseline")
 plt.title("ROC Curve – Churn (anti-leakage)")
 plt.xlabel("False Positive Rate"); plt.ylabel("True Positive Rate")
 plt.legend(loc="lower right"); plt.grid(alpha=0.3, linestyle="--"); plt.tight_layout()
-plt.show()
+st.pyplot(fig)
 
 # Tabel ringkas metrik
 result_df = pd.DataFrame(rows, columns=["Model","ROC_AUC","Accuracy","Precision","Recall","F1","ConfusionMatrix"])\
@@ -892,15 +900,15 @@ Logika umumnya:
 Makanya, kalau analisis lebih lanjut (Confusion Matrix, ROC Curve detail, Feature Importance), kita pakai pipeline XGBoost yang sama dengan yang menghasilkan 0.858 di tabel.
 """
 
-SEED = 42  # satu sumber kebenaran
-np.random.seed(SEED)
+seed = 42  # satu sumber kebenaran
+np.random.seed(seed)
 
 # Asumsi: df sudah ada, target = "Exited"
 y = df["Exited"].astype(int)
 X = df.drop(columns=["Exited", "RowNumber", "CustomerId", "Surname"], errors="ignore")
 
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=test_size, stratify=y, random_state=SEED
+    X, y, test_size=test_size, stratify=y, random_state=seed
 )
 
 # 1) Preprocessor (satu-satunya yang dipakai semua model)
@@ -919,17 +927,17 @@ preprocessor = ColumnTransformer(
 
 # 2) Definisikan SEMUA pipeline model (supaya seragam & anti-leakage)
 models = {
-    "Dummy(stratified)": DummyClassifier(strategy="stratified", random_state=SEED),
-    "LogReg": LogisticRegression(max_iter=1000, class_weight="balanced", random_state=SEED),
-    "SVM-RBF": SVC(kernel="rbf", gamma="scale", C=1.0, probability=True, class_weight="balanced", random_state=SEED),
-    "DecisionTree": DecisionTreeClassifier(random_state=SEED, class_weight="balanced"),
+    "Dummy(stratified)": DummyClassifier(strategy="stratified", random_state=seed,
+    "LogReg": LogisticRegression(max_iter=1000, class_weight="balanced", random_state=seed),
+    "SVM-RBF": SVC(kernel="rbf", gamma="scale", C=1.0, probability=True, class_weight="balanced", random_state=seed),
+    "DecisionTree": DecisionTreeClassifier(random_state=seed, class_weight="balanced"),
     "RandomForest": RandomForestClassifier(
-        n_estimators=300, random_state=SEED, n_jobs=-1, class_weight="balanced_subsample"
+        n_estimators=300, random_state=seed, n_jobs=-1, class_weight="balanced_subsample"
     ),
     "XGBoost": XGBClassifier(
         n_estimators=400, max_depth=5, learning_rate=0.05,
         subsample=0.9, colsample_bytree=0.9,
-        reg_lambda=1.0, random_state=SEED,
+        reg_lambda=1.0, random_state=seed,
         n_jobs=-1, eval_metric="logloss", tree_method="hist"
     ),
 }
@@ -972,13 +980,13 @@ y_score = best_pipe.predict_proba(X_test)[:, 1]
 auc_best = roc_auc_score(y_test, y_score)
 
 fpr, tpr, _ = roc_curve(y_test, y_score)
-plt.figure(figsize=(6,5))
+fig, ax = plt.subplots(figsize=(6,4))
 plt.plot(fpr, tpr, lw=2, label=f"{best_name} (AUC={auc_best:.3f})")
 plt.plot([0,1],[0,1], "--", lw=1.2, label="Baseline", color="orange")
 plt.title("ROC Curve – Model Terbaik (tanpa retrain)")
 plt.xlabel("False Positive Rate"); plt.ylabel("True Positive Rate")
 plt.legend(loc="lower right"); plt.grid(alpha=0.3, linestyle="--"); plt.tight_layout()
-plt.show()
+st.pyplot(fig)
 
 # 5) (Opsional) Paksa visualisasi khusus XGBoost pakai model yang SAMA
 xgb_pipe = trained["XGBoost"]  # ini pipeline persis yang dipakai di tabel
@@ -994,7 +1002,7 @@ y = df["Exited"].astype(int)
 X = df.drop(columns=["Exited", "RowNumber", "CustomerId", "Surname"], errors="ignore")
 
 X_train, X_test, y_train, y_test = train_test_split(
-  X, y, test_size=test_size, stratify=y, random_state=SEED)
+  X, y, test_size=test_size, stratify=y, random_state=seed)
 
 # Preprocessing pipeline
 num_cols = X_train.select_dtypes(include=["int64","float64","int32","float32"]).columns.tolist()
@@ -1013,7 +1021,7 @@ preprocess = ColumnTransformer([
 # Definisikan model + ruang hyperparameter
 pipe_base = Pipeline([("prep", preprocess), ("clf", LogisticRegression())])  # placeholder, akan diganti di search
 
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED)
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed)
 scoring = "roc_auc"
 n_iter = 30  # naikkan kalau mau lebih teliti
 
@@ -1021,7 +1029,7 @@ search_spaces = {}
 
 # Logistic Regression (liblinear untuk kestabilan kelas tak seimbang)
 search_spaces["LogReg"] = {
-  "estimator": LogisticRegression(max_iter=2000, class_weight="balanced", solver="liblinear", random_state=SEED),
+  "estimator": LogisticRegression(max_iter=2000, class_weight="balanced", solver="liblinear", random_state=seed),
   "params": {
     "clf__C": np.logspace(-3, 2, 20),
     "clf__penalty": ["l1", "l2"],
@@ -1030,7 +1038,7 @@ search_spaces["LogReg"] = {
 
 # SVM-RBF
 search_spaces["SVM-RBF"] = {
-  "estimator": SVC(kernel="rbf", class_weight="balanced", probability=True, random_state=SEED),
+  "estimator": SVC(kernel="rbf", class_weight="balanced", probability=True, random_state=seed),
   "params": {
     "clf__C": np.logspace(-2, 2, 30),
     "clf__gamma": np.logspace(-4, 1, 30),
@@ -1039,7 +1047,7 @@ search_spaces["SVM-RBF"] = {
 
 # Random Forest
 search_spaces["RandomForest"] = {
-  "estimator": RandomForestClassifier(class_weight="balanced_subsample", random_state=SEED, n_jobs=-1),
+  "estimator": RandomForestClassifier(class_weight="balanced_subsample", random_state=seed, n_jobs=-1),
   "params": {
     "clf__n_estimators": np.arange(200, 701, 50),
     "clf__max_depth": [None] + list(np.arange(3, 21)),
@@ -1056,7 +1064,7 @@ if HAS_XGB:
   pos_weight = (len(y_train) - y_train.sum()) / y_train.sum()
   search_spaces["XGBoost"] = {
     "estimator": XGBClassifier(
-      objective="binary:logistic", eval_metric="auc", random_state=SEED, n_jobs=-1, tree_method="hist",
+      objective="binary:logistic", eval_metric="auc", random_state=seed, n_jobs=-1, tree_method="hist",
       scale_pos_weight=pos_weight
     ),
     "params": {
@@ -1069,17 +1077,17 @@ if HAS_XGB:
   }
 }
 
-SEED = 42
-cv_fast = StratifiedKFold(n_splits=2, shuffle=True, random_state=SEED)
+seed = 42
+cv_fast = StratifiedKFold(n_splits=2, shuffle=True, random_state=seed)
 
 # Subset train untuk tuning
 SUBSET_FRAC = 0.30
-X_tune = X_train.sample(frac=SUBSET_FRAC, random_state=SEED)
+X_tune = X_train.sample(frac=SUBSET_FRAC, random_state=seed)
 y_tune = y_train.loc[X_tune.index]
 
 search_spaces = {
     "LogReg": {
-        "estimator": LogisticRegression(max_iter=2000, class_weight="balanced", solver="liblinear", random_state=SEED),
+        "estimator": LogisticRegression(max_iter=2000, class_weight="balanced", solver="liblinear", random_state=seed),
         "params": {
             "clf__C": [0.01, 0.03, 0.1, 0.3, 1, 3, 10],
             "clf__penalty": ["l1", "l2"],
@@ -1087,7 +1095,7 @@ search_spaces = {
     },
     "RandomForest": {
         "estimator": RandomForestClassifier(class_weight="balanced_subsample",
-                                            random_state=SEED, n_jobs=-1),
+                                            random_state=seed, n_jobs=-1),
         "params": {
             "clf__n_estimators": [100, 150],
             "clf__max_depth": [None, 8, 12],
@@ -1113,8 +1121,8 @@ for name, spec in search_spaces.items():
         max_resources=len(X_tune),
         scoring="roc_auc",
         cv=cv_fast,
-        random_state=SEED,
-        n_jobs=1, # Changed n_jobs from -1 to 1 to avoid multiprocessing issues
+        random_state=seed,
+        n_jobs=1,
         verbose=1
     )
     hrs.fit(X_tune, y_tune)
@@ -1149,11 +1157,11 @@ st.write(f"F1  : {f1_score(y_test, y_pred, zero_division=0):.3f}")
 
 # (opsional) ROC plot
 fpr, tpr, _ = roc_curve(y_test, y_score)
-plt.figure(figsize=(6,5))
+fig, ax = plt.subplots(figsize=(6,4))
 plt.plot(fpr, tpr, lw=2, label=f"{best_name}")
 plt.plot([0,1],[0,1],"--", lw=1.2)
 plt.title("ROC – Best Model (FAST Halving)"); plt.xlabel("FPR"); plt.ylabel("TPR")
-plt.legend(); plt.grid(alpha=0.3, linestyle="--"); plt.tight_layout(); plt.show()
+plt.legend(); plt.grid(alpha=0.3, linestyle="--"); plt.tight_layout(); st.pyplot(fig)
 
 """Hasil ROC RF lebih baik karena:
   - Plot multi-model yang AUC XGBoost = 0.858 itu kemungkinan dari default parameters atau tuning manual yang udah optimal.
@@ -1173,7 +1181,7 @@ y = df["Exited"].astype(int)
 X = df.drop(columns=["Exited","RowNumber","CustomerId","Surname"], errors="ignore")
 
 X_train, X_test, y_train, y_test = train_test_split(
-  X, y, test_size=test_size, stratify=y, random_state=SEED)
+  X, y, test_size=test_size, stratify=y, random_state=seed)
 
 # Preprocess (fit hanya di train via pipeline)
 num_cols = X_train.select_dtypes(include=["int64","float64","int32","float32"]).columns.tolist()
@@ -1191,17 +1199,17 @@ preprocess = ColumnTransformer([
 
 # Kandidat model
 models = {
-  "LogReg": LogisticRegression(max_iter=1000, class_weight="balanced", random_state=SEED),
+  "LogReg": LogisticRegression(max_iter=1000, class_weight="balanced", random_state=seed),
   # probability=False agar cepat; AUC pakai decision_function
-  "SVM-RBF": SVC(kernel="rbf", C=1.0, gamma="scale", class_weight="balanced", probability=False, random_state=SEED),
-  "DecisionTree": DecisionTreeClassifier(random_state=SEED, class_weight="balanced"),
-  "RandomForest": RandomForestClassifier(n_estimators=300, random_state=SEED, n_jobs=-1, class_weight="balanced_subsample"),
+  "SVM-RBF": SVC(kernel="rbf", C=1.0, gamma="scale", class_weight="balanced", probability=False, random_state=seed),
+  "DecisionTree": DecisionTreeClassifier(random_state=seed, class_weight="balanced"),
+  "RandomForest": RandomForestClassifier(n_estimators=300, random_state=seed, n_jobs=-1, class_weight="balanced_subsample"),
 }
 if HAS_XGB:
   models["XGBoost"] = XGBClassifier(
     n_estimators=400, max_depth=5, learning_rate=0.05,
     subsample=0.9, colsample_bytree=0.9, reg_lambda=1.0,
-    eval_metric="auc", random_state=SEED, n_jobs=-1, tree_method="hist")
+    eval_metric="auc", random_state=seed, n_jobs=-1, tree_method="hist")
 
 """Pemilihan Kandidat Model:
 - Model dipilih untuk mewakili beragam pendekatan algoritmik pada data tabular, sehingga evaluasi mencakup metode linier, non-linier, pohon keputusan, dan ensemble.
@@ -1215,7 +1223,7 @@ if HAS_XGB:
 """
 
 # Evaluasi: CV (ROC-AUC) + Test metrics
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED)
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed)
 rows, fitted = [], {}
 
 for name, clf in models.items():
@@ -1262,7 +1270,7 @@ Selain itu, XGBoost menggabungkan kekuatan boosting dengan pengaturan regulasi y
 
 # Plot ROC untuk 3 model teratas
 top_k = results_df["Model"].head(3).tolist()
-plt.figure(figsize=(7,6))
+fig, ax = plt.subplots(figsize=(7,4))
 for name in top_k:
   pipe = fitted[name]
   if hasattr(pipe.named_steps["clf"], "predict_proba"):
@@ -1278,7 +1286,7 @@ plt.plot([0,1],[0,1], "--", lw=1.2, label="Baseline")
 plt.title("ROC Curve – Top 3 Model")
 plt.xlabel("False Positive Rate"); plt.ylabel("True Positive Rate")
 plt.legend(loc="lower right"); plt.grid(alpha=0.3, linestyle="--"); plt.tight_layout()
-plt.show()
+st.pyplot(fig)
 
 """#Interpretasi dan Wawasan
 
@@ -1312,7 +1320,7 @@ y = df["Exited"].astype(int)
 X = df.drop(columns=["Exited","RowNumber","CustomerId","Surname"], errors="ignore")
 
 X_train, X_test, y_train, y_test = train_test_split(
-  X, y, test_size=test_size, stratify=y, random_state=SEED
+  X, y, test_size=test_size, stratify=y, random_state=seed
 )
 
 num_cols = X_train.select_dtypes(include=["int64","float64","int32","float32"]).columns.tolist()
@@ -1329,7 +1337,7 @@ preprocess = ColumnTransformer([
 pipe = Pipeline([
   ("prep", preprocess),
   ("clf", RandomForestClassifier(
-    n_estimators=300, random_state=SEED, n_jobs=-1,
+    n_estimators=300, random_state=seed, n_jobs=-1,
     class_weight="balanced_subsample"
   ))
 ])
@@ -1356,14 +1364,14 @@ st.write("\nClassification Report:\n", classification_report(y_test, y_pred, zer
 # Hitung confusion matrix
 cm = confusion_matrix(y_test, y_pred)
 
-plt.figure(figsize=(6,5))
+fig, ax = plt.subplots(figsize=(6,4))
 sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
   xticklabels=["No Churn", "Churn"],
   yticklabels=["No Churn", "Churn"])
 plt.ylabel('True label')
 plt.xlabel('Predicted label')
 plt.title("Confusion Matrix - Model Evaluasi")
-plt.show()
+st.pyplot(fig)
 
 try:
   y_score
@@ -1383,14 +1391,14 @@ auc_val = roc_auc_score(y_test, y_score)
 youden_idx = np.argmax(tpr - fpr)
 thr_youden = float(thr[youden_idx])
 
-plt.figure(figsize=(6.2, 5.2))
+fig, ax = plt.subplots(figsize=(6.2, 5.2))
 plt.plot(fpr, tpr, lw=2, label=f"Model (AUC={auc_val:.3f})")
 plt.plot([0, 1], [0, 1], "--", lw=1.2, label="Baseline")
 plt.scatter(fpr[youden_idx], tpr[youden_idx], s=60, edgecolor="k", label=f"Youden* (thr≈{thr_youden:.2f})")
 plt.title("ROC Curve")
 plt.xlabel("False Positive Rate"); plt.ylabel("True Positive Rate")
 plt.legend(loc="lower right"); plt.grid(alpha=0.3, linestyle="--")
-plt.tight_layout(); plt.show()
+plt.tight_layout(); st.pyplot(fig)
 
 """1. ROC Curve & AUC
 - ROC Curve menunjukkan trade-off antara True Positive Rate (TPR) dan False Positive Rate (FPR) pada berbagai threshold.
@@ -1426,14 +1434,14 @@ for t in grid:
   rec_list.append(recall_score(y_test, yp, zero_division=0))
   f1_list.append(f1_score(y_test, yp, zero_division=0))
 
-plt.figure(figsize=(7.2, 4.6))
+fig, ax = plt.subplots(figsize=(7.2, 4.6))
 plt.plot(grid, prec_list, label="Precision")
 plt.plot(grid, rec_list,  label="Recall")
 plt.plot(grid, f1_list,   label="F1")
 plt.axvline(thr_youden, ls="--", color="gray", label=f"Youden* ({thr_youden:.2f})")
 plt.title("Precision / Recall / F1 vs Threshold")
 plt.xlabel("Threshold"); plt.ylabel("Score"); plt.legend()
-plt.grid(alpha=0.3, linestyle="--"); plt.tight_layout(); plt.show()
+plt.grid(alpha=0.3, linestyle="--"); plt.tight_layout(); st.pyplot(fig)
 
 """1. Kenapa tidak pakai threshold default 0.5 saja?
   - Threshold 0.5 itu arbitrary (default di banyak library), bukan threshold optimal untuk semua kasus.
@@ -1504,11 +1512,11 @@ st.write("Confusion Matrix:\n", res_y["CM"])
 
 # Heatmap untuk threshold Youden
 labels = ["No Churn", "Churn"]
-plt.figure(figsize=(5.3, 4.6))
+fig, ax = plt.subplots(figsize=(5.3, 4.6))
 sns.heatmap(res_y["CM"], annot=True, fmt="d", cmap="Blues", cbar=False, xticklabels=labels, yticklabels=labels)
 plt.xlabel("Prediksi"); plt.ylabel("Aktual")
 plt.title(f"Confusion Matrix (thr≈{thr_youden:.2f})")
-plt.tight_layout(); plt.show()
+plt.tight_layout(); st.pyplot(fig)
 
 """Ini dilanjutkan ke Permutation Importance supaya tahu fitur mana yang paling berpengaruh ke prediksi model.
 Dilakukan setelah OHE agar setiap kategori fitur bisa diukur pengaruhnya.
@@ -1544,11 +1552,11 @@ imp = (pd.DataFrame({"feature": feat_names_out, "importance": r.importances_mean
 
 st.write(imp.to_string(index=False))
 
-plt.figure(figsize=(8,6))
+fig, ax = plt.subplots(figsize=(8,6))
 plt.barh(imp["feature"][::-1], imp["importance"][::-1])
 plt.title("Permutation Importance (fitur setelah OHE, AUC)")
 plt.xlabel("Mean importance")
-plt.tight_layout(); plt.show()
+plt.tight_layout(); st.pyplot(fig)
 
 """Untuk memahami hubungan antara fitur penting dan prediksi model secara lebih mendalam. Alasannya:
   - Menjelaskan model – Setelah tahu fitur penting dari Permutation Importance, PDP/ICE menjawab “bagaimana perubahan nilai fitur memengaruhi probabilitas churn.”
@@ -1566,10 +1574,10 @@ PDP/ICE tidak penting untuk menjelaskan keputusan model dan mendapatkan insight 
 focus_feats = [c for c in ["Age","CreditScore","Balance","NumOfProducts","Tenure"] if c in X.columns]
 if focus_feats:
   for f in focus_feats:
-    fig = plt.figure(figsize=(5.5,4.2))
+    fig, ax = plt.figure(figsize=(5.5,4.2))
     PartialDependenceDisplay.from_estimator(pipe, X, [f], kind="both", grid_resolution=30)
     plt.title(f"PDP/ICE – {f}")
-    plt.tight_layout(); plt.show()
+    plt.tight_layout(); st.pyplot(fig)
 
 """Mengulang analisis feature importance (Permutation Importance) tapi kali ini langsung menggunakan X_test tanpa memperlihatkan detail OHE, lalu divisualisasikan dalam bentuk bar chart Top-20 supaya:
   - Lebih ringkas dan fokus – langsung melihat fitur yang paling berpengaruh pada model di data uji.
@@ -1593,12 +1601,12 @@ imp_df = pd.DataFrame({
 }).sort_values("Importance", ascending=False).head(20)
 
 # Plot bar chart
-plt.figure(figsize=(8,5))
+fig, ax = plt.subplots(figsize=(8,5))
 plt.barh(imp_df["Feature"], imp_df["Importance"])
 plt.gca().invert_yaxis()
 plt.xlabel("Mean Importance (AUC drop)")
 plt.title("Top-20 Feature Importance (Permutation)")
-plt.show()
+st.pyplot(fig)
 
 """Kita melakukan ini karena Lift Curve dan Cumulative Gain Curve adalah alat evaluasi yang sangat berguna di konteks bisnis seperti churn prediction:
 1. Mengukur efektivitas model dibanding random targeting
@@ -1646,7 +1654,7 @@ cumu_gain     = cum_positives / pos
 lift          = cumu_gain / perc_samples
 
 # Plot Cumulative Gain
-plt.figure(figsize=(6.6, 5.0))
+fig, ax = plt.subplots(figsize=(6.6, 5.0))
 plt.plot(perc_samples, cumu_gain, lw=2, label="Model")
 plt.plot([0,1], [0,1], "--", lw=1.2, label="Baseline (acak)")
 plt.title("Cumulative Gain")
@@ -1655,10 +1663,10 @@ plt.ylabel("Proporsi Churn Terdeteksi")
 plt.legend(loc="lower right")
 plt.grid(alpha=0.3, linestyle="--")
 plt.tight_layout()
-plt.show()
+st.pyplot(fig)
 
 # Plot Lift
-plt.figure(figsize=(6.6, 5.0))
+fig, ax = plt.subplots(figsize=(6.6, 5.0))
 plt.plot(perc_samples, lift, lw=2, label="Model")
 plt.plot([0,1], [1,1], "--", lw=1.2, label="Baseline (Lift=1)")
 plt.title("Lift Curve")
@@ -1667,7 +1675,7 @@ plt.ylabel("Lift")
 plt.legend(loc="upper right")
 plt.grid(alpha=0.3, linestyle="--")
 plt.tight_layout()
-plt.show()
+st.pyplot(fig)
 
 # Tabel per-decile untuk laporan bisnis
 # Menunjukkan berapa % churn tertangkap jika menargetkan top 10%, 20%, ... dari skor
@@ -1735,7 +1743,8 @@ if HAS_DALEX and hasattr(pipe.named_steps["clf"], "predict_proba"):
   # DALEX plot
   if vp:
     st.write("\nDALEX – Variable Profile (Partial Dependence) plots:")
-    vp.plot()
+    fig = vp.plot()
+    st.pyplot(fig)
 
 """Interpretasi Grafik
 1. Variable Importance (dropout loss)
