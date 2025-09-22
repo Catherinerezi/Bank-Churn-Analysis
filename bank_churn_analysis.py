@@ -8,50 +8,40 @@ Original file is located at
 
 # Install & Load Library
 """
-!pip install dalex
-!pip install scikit-plot
-
-# Commented out IPython magic to ensure Python compatibility.
-# load pandas untuk data wrangling
-import pandas as pd
-# load numpy untuk manipulasi vektor
-import numpy as np
-# load matplotlib untuk visualisasi data
-import matplotlib.pyplot as plt
-# load seaborn untuk visualisasi data
-import seaborn as sns
-
-# load metrics object dari sklearn
-from sklearn import metrics
-# load train-test data splitter
-from sklearn.model_selection import train_test_split
-# load Decision Tree classifier model
-from sklearn.tree import DecisionTreeClassifier
-# load Random Forest classifier model
-from sklearn.ensemble import RandomForestClassifier
-# load SVM classifier model
-from sklearn.svm import SVC
-# load KNN classifier model
-from sklearn.neighbors import KNeighborsClassifier
-
-# load xgboost classifier model
-from xgboost import XGBClassifier
-
-# Load DALEX untuk interpretability
-import dalex as dx
 
 # load scikitplot untuk visualisasi metrik
-# import scikitplot as skplt
+import streamlit as st
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# %matplotlib inline
+from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.metrics import (
+    roc_auc_score, roc_curve, accuracy_score, precision_score, recall_score, f1_score,
+    confusion_matrix, classification_report
+)
+from sklearn.dummy import DummyClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
 
 pd.set_option('display.max_columns', 100)
 
 """# Load Dataset"""
 
 # load dataset ke raw_data
-df = pd.read_csv("https://raw.githubusercontent.com/hadimaster65555/dataset_for_teaching/refs/heads/main/dataset/bank_churn_dataset_2/Churn_Modelling.csv")
-df.head()
+st.sidebar.header("⚙️ Pengaturan")
+url_default = "https://raw.githubusercontent.com/hadimaster65555/dataset_for_teaching/refs/heads/main/dataset/bank_churn_dataset_2/Churn_Modelling.csv"
+if uploaded is None:
+    df = pd.read_csv(url_default)
+else:
+    df = pd.read_csv(uploaded)
 
 """#Eksplorasi Data
 
@@ -152,11 +142,6 @@ for col in cat_cols:
   print((df[col].value_counts(normalize=True) * 100).round(2))
   print("-" * 40)
 
-from sklearn.model_selection import train_test_split
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-
 # 1. Pisahkan fitur (X) dan target (y)
 X = df.drop(["Exited"], axis=1)
 y = df["Exited"]
@@ -164,7 +149,7 @@ y = df["Exited"]
 # 2. Split data menjadi train dan test set (stratify agar distribusi Churn seimbang di kedua set)
 X_train, X_test, y_train, y_test = train_test_split(
     X, y,
-    test_size=0.2,
+    test_size=test_size,
     stratify=y,
     random_state=1000
 )
@@ -172,10 +157,6 @@ X_train, X_test, y_train, y_test = train_test_split(
 # 3. Gabungkan kembali X_train dengan y_train untuk eksplorasi
 train_data = X_train.copy()
 train_data["Exited"] = y_train
-
-import seaborn as sns
-import matplotlib.pyplot as plt
-import pandas as pd
 
 # Create a temporary DataFrame for plotting the target distribution
 # This ensures the 'Exited' column is present for visualization
@@ -191,13 +172,8 @@ plt.show()
 
 # Persentase churn
 churn_rate = plot_data['Exited'].value_counts(normalize=True) * 100 # Use plot_data
-print("Persentase Exited:")
-print(churn_rate)
-
-import numpy as np
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
+st.write("Persentase Exited:")
+st.write(churn_rate)
 
 # pakai dataframe training yang sudah ada
 # kalau kamu sudah punya X_train, y_train:
@@ -238,14 +214,10 @@ target_corr = (
     .dropna()
     .sort_values(key=np.abs, ascending=False)
 )
-print("\nTop korelasi fitur vs target:")
-print(target_corr.head(15).to_string())
+st.write("\nTop korelasi fitur vs target:")
+st.write(target_corr.head(15).to_string())
 
 """##Categorical Data vs Churn"""
-
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 
 # Setup data
 target_col = "Churn"
@@ -326,10 +298,6 @@ for start in range(0, len(categorical_cols), BATCH):
     plt.show()
     plt.close(fig)
 
-import seaborn as sns
-import numpy as np
-import matplotlib.pyplot as plt
-
 # Setup data
 target_col = "Exited" # Changed Churn to Exited
 df_train = X_train.copy()
@@ -377,10 +345,6 @@ for start in range(0, len(numeric_cols), BATCH):
     plt.close(fig)
 
 """#Visualisasi Data"""
-
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
 
 # Tentukan nama target yang tersedia
 target_col = "Exited" if "Exited" in df.columns else ("Churn" if "Churn" in df.columns else None)
@@ -538,15 +502,15 @@ new_cols = [
   "Products_x_Active", "IsSenior_55plus", "Age_Bin",
   "LowCreditScore", "HighCreditScore", "HighBalance"
 ]
-print("Kolom baru:", new_cols)
-print("\nPreview fitur baru:")
+st.write("Kolom baru:", new_cols)
+st.write("\nPreview fitur baru:")
 df_fe[new_cols + ["Exited"]].head()
 
 cols_categorical = ["Geography", "Gender", "Age_Bin"]
 df_model = pd.get_dummies(df_fe.drop(columns=["RowNumber","CustomerId","Surname"]), columns=cols_categorical, drop_first=True)
 
-print("\nShape siap modeling:", df_model.shape)
-print("Kolom siap modeling (cuplikan):")
+st.write("\nShape siap modeling:", df_model.shape)
+st.write("Kolom siap modeling (cuplikan):")
 df_model.columns[:25]
 
 """#Pemrosesan Awal Data"""
@@ -559,7 +523,7 @@ def missing_report(df):
   }).sort_values("pct_missing", ascending=False)
   return rep
 
-print("Ringkasan Missing Values:")
+st.write("Ringkasan Missing Values:")
 missing_report(df).head()
 
 # Drop kolom dengan missing berlebihan
@@ -570,10 +534,10 @@ missing_summary['pct_missing_decimal'] = missing_summary['pct_missing'] / 100 # 
 
 cols_to_drop = missing_summary.query("pct_missing_decimal > @DROP_THRESHOLD").index.tolist()
 if cols_to_drop:
-  print("\nDropping columns with excessive missing:", cols_to_drop)
+  st.write("\nDropping columns with excessive missing:", cols_to_drop)
   df = df.drop(columns=cols_to_drop)
 else:
-  print("\nNo columns to drop based on the missing value threshold.")
+  st.write("\nNo columns to drop based on the missing value threshold.")
 
 """Threshold 60% dipakai supaya:
   - Jaga fitur penting – Kolom yang masih punya >40% data jangan langsung dibuang karena mungkin berguna.
@@ -594,17 +558,14 @@ X = df.drop(columns=["Exited", "RowNumber", "CustomerId", "Surname"], errors="ig
 
 # Train/Test split (hindari leakage saat imputasi)
 X_train, X_test, y_train, y_test = train_test_split(
-  X, y, test_size=0.2, random_state=42, stratify=y)
+  X, y, test_size=test_size, random_state=42, stratify=y)
 
 # Deteksi tipe kolom
 numeric_features = X_train.select_dtypes(include=["int64", "float64", "int32", "float32"]).columns.tolist()
 categorical_features = X_train.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
 
-print("\nNumeric features:", numeric_features)
-print("Categorical features:", categorical_features)
-
-from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer
+st.write("\nNumeric features:", numeric_features)
+st.write("Categorical features:", categorical_features)
 
 # Pipeline imputasi
 # Numerik: median (robust terhadap outlier)
@@ -613,9 +574,6 @@ numeric_pipeline = Pipeline(steps=[
 ])
 
 """Pipeline imputasi ini dipakai untuk kolom numerik. SimpleImputer(strategy="median") → Mengisi nilai yang hilang (missing) dengan median, karena median tidak terpengaruh ekstrem/outlier seperti mean. Dibungkus di Pipeline supaya langkah ini bisa otomatis jalan bareng preprocessing lain, dan aman saat fit hanya di data train (hindari data leakage)."""
-
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.impute import SimpleImputer
 
 # Kategorikal: modus; jika kolom seluruhnya NA, SimpleImputer akan isi dengan string 'missing' jika strategy='most_frequent' tidak valid.
 # Untuk jaga-jaga, kita gunakan 'constant' -> 'Unknown' agar selalu aman.
@@ -639,16 +597,14 @@ X = df.drop(columns=["Exited", "RowNumber", "CustomerId", "Surname"], errors="ig
 
 # Train/Test split (hindari leakage saat imputasi)
 X_train, X_test, y_train, y_test = train_test_split(
-  X, y, test_size=0.2, random_state=42, stratify=y)
+  X, y, test_size=test_size, random_state=42, stratify=y)
 
 # Deteksi tipe kolom
 numeric_features = X_train.select_dtypes(include=["int64", "float64", "int32", "float32"]).columns.tolist()
 categorical_features = X_train.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
 
-print("\nNumeric features:", numeric_features)
-print("Categorical features:", categorical_features)
-
-from sklearn.compose import ColumnTransformer
+st.write("\nNumeric features:", numeric_features)
+st.write("Categorical features:", categorical_features)
 
 # Pipeline imputasi
 # Numerik: median (robust terhadap outlier)
@@ -684,15 +640,13 @@ preprocess = ColumnTransformer(
 X_train_pre = preprocess.fit_transform(X_train)
 X_test_pre  = preprocess.transform(X_test)
 
-print("\nShape sebelum preprocessing:", X_train.shape, X_test.shape)
-print("Shape sesudah preprocessing (siap ke model):", X_train_pre.shape, X_test_pre.shape)
+st.write("\nShape sebelum preprocessing:", X_train.shape, X_test.shape)
+st.write("Shape sesudah preprocessing (siap ke model):", X_train_pre.shape, X_test_pre.shape)
 
 """- Preprocess.fit_transform(X_train) → Latih langkah preprocessing (imputasi, scaling, encoding) hanya di data train lalu langsung ubah datanya.
 - Preprocess.transform(X_test) → Terapkan preprocessing yang sudah dipelajari dari train ke data test (supaya tidak bocor info dari test ke model).
 - Print shape → Mengecek jumlah fitur sebelum & sesudah preprocessing. Setelah preprocessing biasanya jumlah kolom bertambah karena OneHotEncoding membuat kolom baru untuk tiap kategori.
 """
-
-from sklearn.preprocessing import OneHotEncoder
 
 def get_feature_names(preprocess, num_cols, cat_cols):
   num_names = num_cols
@@ -703,7 +657,7 @@ def get_feature_names(preprocess, num_cols, cat_cols):
   return num_names + cat_names
 
 feature_names = get_feature_names(preprocess, numeric_features, categorical_features)
-print("\nContoh 20 fitur hasil preprocessing:")
+st.write("\nContoh 20 fitur hasil preprocessing:")
 feature_names[:20]
 
 """- Fungsi get_feature_names → Mengambil kembali nama fitur asli setelah preprocessing, termasuk hasil OneHotEncoding.
@@ -718,27 +672,17 @@ feature_names[:20]
 numeric_features = X_train.select_dtypes(include=["int64", "float64"]).columns.tolist()
 categorical_features = X_train.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
 
-from sklearn.preprocessing import StandardScaler
-from sklearn.impute import SimpleImputer
-from sklearn.pipeline import Pipeline
-
 # Pipeline numerik: imputasi median + scaling
 numeric_pipeline = Pipeline(steps=[
   ("imputer", SimpleImputer(strategy="median")),
   ("scaler", StandardScaler())
 ])
 
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.impute import SimpleImputer
-from sklearn.pipeline import Pipeline
-
 # Pipeline kategorikal: imputasi 'Unknown' + OneHot
 categorical_pipeline = Pipeline(steps=[
   ("imputer", SimpleImputer(strategy="constant", fill_value="Unknown")),
   ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
 ])
-
-from sklearn.compose import ColumnTransformer
 
 # Gabung semua
 preprocess = ColumnTransformer(
@@ -752,8 +696,8 @@ preprocess = ColumnTransformer(
 X_train_scaled = preprocess.fit_transform(X_train)
 X_test_scaled = preprocess.transform(X_test)
 
-print("Shape sebelum preprocessing:", X_train.shape)
-print("Shape sesudah preprocessing:", X_train_scaled.shape)
+st.write("Shape sebelum preprocessing:", X_train.shape)
+st.write("Shape sesudah preprocessing:", X_train_scaled.shape)
 
 """- Pipeline numerik (numeric_pipeline)
   - SimpleImputer(strategy="median") → Isi nilai kosong dengan median (aman terhadap outlier).
@@ -768,8 +712,8 @@ print("Shape sesudah preprocessing:", X_train_scaled.shape)
 
 # Cek mean & std setelah scaling numerik
 num_scaled = X_train_scaled[:, :len(numeric_features)]
-print("\nMean tiap fitur numerik (setelah scaling):", np.round(num_scaled.mean(axis=0), 4))
-print("Std tiap fitur numerik (setelah scaling):", np.round(num_scaled.std(axis=0), 4))
+st.write("\nMean tiap fitur numerik (setelah scaling):", np.round(num_scaled.mean(axis=0), 4))
+st.write("Std tiap fitur numerik (setelah scaling):", np.round(num_scaled.std(axis=0), 4))
 
 """- num_scaled = X_train_scaled[:, :len(numeric_features)] → Mengambil bagian awal array hasil preprocessing yang berisi fitur numerik (karena urutan di ColumnTransformer menaruh numerik dulu).
 - mean(axis=0) → Hitung rata-rata setiap fitur numerik setelah scaling.
@@ -780,8 +724,8 @@ std(axis=0) → Hitung standar deviasi setiap fitur numerik setelah scaling.
 #Pemilihan Model
 """
 
-SEED = 42
-np.random.seed(SEED)
+np.random.seed(seed)
+random_state=seed
 
 # Load data (fresh) + bersihkan duplikat
 URL = "https://raw.githubusercontent.com/hadimaster65555/dataset_for_teaching/refs/heads/main/dataset/bank_churn_dataset_2/Churn_Modelling.csv"
@@ -794,13 +738,13 @@ y = df["Exited"].astype(int)
 
 # Split stratified (baru SETELAH ini semua transformasi dilakukan)
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, stratify=y, random_state=SEED
+    X, y, test_size=test_size, stratify=y, random_state=SEED
 )
 
 # Sanity check: tidak ada baris identik di train & test
 train_hash = pd.util.hash_pandas_object(X_train, index=False)
 test_hash  = pd.util.hash_pandas_object(X_test,  index=False)
-print(f"Overlap baris train–test: {len(set(train_hash).intersection(set(test_hash)))}")
+st.write(f"Overlap baris train–test: {len(set(train_hash).intersection(set(test_hash)))}")
 
 """- Mengecek apakah ada baris yang identik antara data train dan test, supaya tidak terjadi data leakage.
 - pd.util.hash_pandas_object(..., index=False) → Mengubah setiap baris DataFrame menjadi nilai hash unik (seperti sidik jari data).
@@ -858,13 +802,6 @@ preprocess = ColumnTransformer([
   - Semua langkah bersih, satu objek preprocess yang bisa disimpan dan dipakai lagi.
 """
 
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
-from sklearn.dummy import DummyClassifier
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
-from xgboost import XGBClassifier # Assuming XGBoost is installed and desired
-
 # Model yang akan dibandingkan
 models = {
   "Dummy(stratified)": DummyClassifier(strategy="stratified", random_state=SEED),
@@ -875,18 +812,17 @@ models = {
 
 # Check if XGBoost is available and add it to models if HAS_XGB is True
 try:
-  from xgboost import XGBClassifier
-  HAS_XGB = True
-except ImportError:
-  HAS_XGB = False
-  print("XGBoost not installed. Skipping XGBoost model.")
+    from xgboost import XGBClassifier
+    HAS_XGB = True
+except Exception:
+    HAS_XGB = False
 
 if HAS_XGB:
-  models["XGBoost"] = XGBClassifier(
-  n_estimators=400, max_depth=5, learning_rate=0.05,
-  subsample=0.9, colsample_bytree=0.9, reg_lambda=1.0,
-  random_state=SEED, n_jobs=-1, eval_metric="logloss", tree_method="hist"
-)
+    models["XGBoost"] = XGBClassifier(
+        n_estimators=400, max_depth=5, learning_rate=0.05,
+        subsample=0.9, colsample_bytree=0.9, reg_lambda=1.0,
+        random_state=SEED, n_jobs=-1, eval_metric="logloss", tree_method="hist"
+    )
 
 """- Menyiapkan beberapa model yang berbeda untuk dibandingkan performanya dalam memprediksi churn.
 - DummyClassifier → Model acak (baseline) untuk pembanding minimal.
@@ -898,10 +834,6 @@ if HAS_XGB:
 - class_weight="balanced" / "balanced_subsample" → Mengatasi ketidakseimbangan kelas churn vs non-churn.
 - try/except XGBoost → Mengecek apakah XGBoost terpasang; jika tidak, model ini dilewati.
 """
-
-from sklearn.metrics import (roc_auc_score, roc_curve, auc,
-  accuracy_score, precision_score, recall_score, f1_score,
-  confusion_matrix)
 
 # Train, evaluasi, dan ROC plot
 rows = []
@@ -917,7 +849,7 @@ for name, clf in models.items():
     dec = pipe.decision_function(X_test)
     y_score = (dec - dec.min()) / (dec.max() - dec.min() + 1e-9)
 
-  y_pred = (y_score >= 0.5).astype(int)
+  y_pred = (y_score >= thr).astype(int)
 
   # metrik
   auc_val = roc_auc_score(y_test, y_score)
@@ -943,7 +875,7 @@ plt.show()
 # Tabel ringkas metrik
 result_df = pd.DataFrame(rows, columns=["Model","ROC_AUC","Accuracy","Precision","Recall","F1","ConfusionMatrix"])\
   .sort_values("ROC_AUC", ascending=False)
-print(result_df.to_string(index=False))
+st.write(result_df.to_string(index=False))
 
 """#Pelatihan dan Evaluasi Model
 
@@ -955,22 +887,6 @@ Logika umumnya:
 Makanya, kalau analisis lebih lanjut (Confusion Matrix, ROC Curve detail, Feature Importance), kita pakai pipeline XGBoost yang sama dengan yang menghasilkan 0.858 di tabel.
 """
 
-# === 0) Setup & split (JALANKAN SEKALI) ===
-import numpy as np, pandas as pd
-from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_predict
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.metrics import roc_auc_score, roc_curve, classification_report, confusion_matrix
-from sklearn.dummy import DummyClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
-from xgboost import XGBClassifier
-import matplotlib.pyplot as plt
-
 SEED = 42  # satu sumber kebenaran
 np.random.seed(SEED)
 
@@ -979,10 +895,10 @@ y = df["Exited"].astype(int)
 X = df.drop(columns=["Exited", "RowNumber", "CustomerId", "Surname"], errors="ignore")
 
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, stratify=y, random_state=SEED
+    X, y, test_size=test_size, stratify=y, random_state=SEED
 )
 
-# === 1) Preprocessor (satu-satunya yang dipakai semua model) ===
+# 1) Preprocessor (satu-satunya yang dipakai semua model)
 num_cols = X_train.select_dtypes(include=["int64","float64","int32","float32"]).columns.tolist()
 cat_cols = X_train.select_dtypes(include=["object","category","bool"]).columns.tolist()
 
@@ -996,7 +912,7 @@ preprocessor = ColumnTransformer(
     remainder="drop"
 )
 
-# === 2) Definisikan SEMUA pipeline model (supaya seragam & anti-leakage) ===
+# 2) Definisikan SEMUA pipeline model (supaya seragam & anti-leakage)
 models = {
     "Dummy(stratified)": DummyClassifier(strategy="stratified", random_state=SEED),
     "LogReg": LogisticRegression(max_iter=1000, class_weight="balanced", random_state=SEED),
@@ -1017,7 +933,7 @@ pipelines = {
     name: Pipeline([("prep", preprocessor), ("clf", mdl)]) for name, mdl in models.items()
 }
 
-# === 3) Train SEMUA pipeline SEKALI, simpan hasil & modelnya ===
+# 3) Train SEMUA pipeline SEKALI, simpan hasil & modelnya
 results = []
 trained = {}
 
@@ -1025,7 +941,7 @@ for name, pipe in pipelines.items():
     pipe.fit(X_train, y_train)
     trained[name] = pipe
     y_proba = pipe.predict_proba(X_test)[:, 1]
-    y_pred  = (y_proba >= 0.5).astype(int)
+    y_pred  = (y_proba >= thr).astype(int)
 
     auc  = roc_auc_score(y_test, y_proba)
     acc  = (y_pred == y_test).mean()
@@ -1041,9 +957,9 @@ for name, pipe in pipelines.items():
     })
 
 results_df = pd.DataFrame(results).sort_values("ROC_AUC", ascending=False).reset_index(drop=True)
-print(results_df)
+st.write(results_df)
 
-# === 4) Pilih model terbaik sesuai tabel (harusnya XGBoost) & PLOT ROC TANPA RETRAIN ===
+# 4) Pilih model terbaik sesuai tabel (harusnya XGBoost) & PLOT ROC TANPA RETRAIN
 best_name = results_df.iloc[0]["Model"]
 best_pipe = trained[best_name]
 
@@ -1059,11 +975,11 @@ plt.xlabel("False Positive Rate"); plt.ylabel("True Positive Rate")
 plt.legend(loc="lower right"); plt.grid(alpha=0.3, linestyle="--"); plt.tight_layout()
 plt.show()
 
-# === 5) (Opsional) Paksa visualisasi khusus XGBoost pakai model yang SAMA ===
+# 5) (Opsional) Paksa visualisasi khusus XGBoost pakai model yang SAMA
 xgb_pipe = trained["XGBoost"]  # ini pipeline persis yang dipakai di tabel
 y_score_xgb = xgb_pipe.predict_proba(X_test)[:, 1]
 auc_xgb = roc_auc_score(y_test, y_score_xgb)
-print(f"AUC XGBoost (harus match tabel): {auc_xgb:.6f}")
+st.write(f"AUC XGBoost (harus match tabel): {auc_xgb:.6f}")
 
 """#Hyperparameter Tuning"""
 
@@ -1073,7 +989,7 @@ y = df["Exited"].astype(int)
 X = df.drop(columns=["Exited", "RowNumber", "CustomerId", "Surname"], errors="ignore")
 
 X_train, X_test, y_train, y_test = train_test_split(
-  X, y, test_size=0.2, stratify=y, random_state=SEED)
+  X, y, test_size=test_size, stratify=y, random_state=SEED)
 
 # Preprocessing pipeline
 num_cols = X_train.select_dtypes(include=["int64","float64","int32","float32"]).columns.tolist()
@@ -1088,13 +1004,6 @@ preprocess = ColumnTransformer([
   ("num", num_pipe, num_cols),
   ("cat", cat_pipe, cat_cols),
 ])
-
-from sklearn.model_selection import train_test_split, StratifiedKFold, RandomizedSearchCV
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
-from sklearn.ensemble import RandomForestClassifier
-from xgboost import XGBClassifier # Assuming XGBoost is installed and desired
-
 
 # Definisikan model + ruang hyperparameter
 pipe_base = Pipeline([("prep", preprocess), ("clf", LogisticRegression())])  # placeholder, akan diganti di search
@@ -1155,13 +1064,6 @@ if HAS_XGB:
   }
 }
 
-from sklearn.experimental import enable_halving_search_cv
-from sklearn.model_selection import HalvingRandomSearchCV, StratifiedKFold
-from sklearn.pipeline import Pipeline
-import numpy as np, pandas as pd
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-
 SEED = 42
 cv_fast = StratifiedKFold(n_splits=2, shuffle=True, random_state=SEED)
 
@@ -1195,7 +1097,7 @@ results = []
 best_fitted = {}
 
 for name, spec in search_spaces.items():
-    print(f"\n>>> HalvingRandomSearch (FAST) {name} ...")
+    st.write(f"\n>>> HalvingRandomSearch (FAST) {name} ...")
     pipe = Pipeline([("prep", preprocess), ("clf", spec["estimator"])])
     hrs = HalvingRandomSearchCV(
         estimator=pipe,
@@ -1213,11 +1115,11 @@ for name, spec in search_spaces.items():
     hrs.fit(X_tune, y_tune)
     results.append({"Model": name, "CV_ROC_AUC": hrs.best_score_, "BestParams": hrs.best_params_})
     best_fitted[name] = hrs.best_estimator_
-    print(f"Best CV AUC ({name}) = {hrs.best_score_:.3f}")
+    st.write(f"Best CV AUC ({name}) = {hrs.best_score_:.3f}")
 
 results_df = pd.DataFrame(results).sort_values("CV_ROC_AUC", ascending=False)
-print("\n=== FAST Halving results ===")
-print(results_df.to_string(index=False))
+st.write("\n FAST Halving results")
+st.write(results_df.to_string(index=False))
 
 # Refit pemenang di FULL training set (bukan subset)
 best_name = results_df.iloc[0]["Model"]
@@ -1230,19 +1132,17 @@ if hasattr(best_model.named_steps["clf"], "predict_proba"):
 else:
     dec = best_model.decision_function(X_test)
     y_score = (dec - dec.min())/(dec.max()-dec.min()+1e-9)
+    
+y_pred = (y_score >= thr).astype(int)
 
-from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score, f1_score, roc_curve
-y_pred = (y_score >= 0.5).astype(int)
-
-print(f"\n=== Test metrics ({best_name}) ===")
-print(f"AUC : {roc_auc_score(y_test, y_score):.3f}")
-print(f"ACC : {accuracy_score(y_test, y_pred):.3f}")
-print(f"PRE : {precision_score(y_test, y_pred, zero_division=0):.3f}")
-print(f"REC : {recall_score(y_test, y_pred, zero_division=0):.3f}")
-print(f"F1  : {f1_score(y_test, y_pred, zero_division=0):.3f}")
+st.write(f"\n Test metrics ({best_name})")
+st.write(f"AUC : {roc_auc_score(y_test, y_score):.3f}")
+st.write(f"ACC : {accuracy_score(y_test, y_pred):.3f}")
+st.write(f"PRE : {precision_score(y_test, y_pred, zero_division=0):.3f}")
+st.write(f"REC : {recall_score(y_test, y_pred, zero_division=0):.3f}")
+st.write(f"F1  : {f1_score(y_test, y_pred, zero_division=0):.3f}")
 
 # (opsional) ROC plot
-import matplotlib.pyplot as plt
 fpr, tpr, _ = roc_curve(y_test, y_score)
 plt.figure(figsize=(6,5))
 plt.plot(fpr, tpr, lw=2, label=f"{best_name}")
@@ -1268,7 +1168,7 @@ y = df["Exited"].astype(int)
 X = df.drop(columns=["Exited","RowNumber","CustomerId","Surname"], errors="ignore")
 
 X_train, X_test, y_train, y_test = train_test_split(
-  X, y, test_size=0.2, stratify=y, random_state=SEED)
+  X, y, test_size=test_size, stratify=y, random_state=SEED)
 
 # Preprocess (fit hanya di train via pipeline)
 num_cols = X_train.select_dtypes(include=["int64","float64","int32","float32"]).columns.tolist()
@@ -1309,10 +1209,6 @@ if HAS_XGB:
 - Model terbaik ditentukan berdasarkan skor AUC tertinggi dari hasil evaluasi.
 """
 
-from sklearn.pipeline import Pipeline
-from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, roc_curve)
-from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
-
 # Evaluasi: CV (ROC-AUC) + Test metrics
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED)
 rows, fitted = [], {}
@@ -1332,7 +1228,7 @@ for name, clf in models.items():
     # normalisasi ke [0,1] agar kompatibel untuk AUC (opsional)
     y_score = (dec - dec.min()) / (dec.max() - dec.min() + 1e-9)
 
-  y_pred = (y_score >= 0.5).astype(int)
+  y_pred = (y_score >= thr).astype(int)
 
   rows.append({
     "Model": name,
@@ -1347,12 +1243,12 @@ for name, clf in models.items():
   fitted[name] = pipe
 
 results_df = pd.DataFrame(rows).sort_values("Test_ROC_AUC", ascending=False)
-print("\n=== Perbandingan Model (urut AUC test) ===")
+st.write("\n Perbandingan Model (urut AUC test)")
 pd.options.display.float_format = "{:.3f}".format
-print(results_df.to_string(index=False))
+st.write(results_df.to_string(index=False))
 
 best_name = results_df.iloc[0]["Model"]
-print(f"\nModel terbaik berdasarkan Test ROC-AUC: {best_name}")
+st.write(f"\nModel terbaik berdasarkan Test ROC-AUC: {best_name}")
 
 """Pemilihan Model Terbaik:
 Dari hasil evaluasi, XGBoost memperoleh skor AUC tertinggi dibanding kandidat lain, menunjukkan kemampuan terbaik dalam membedakan kelas positif dan negatif pada data ini.
@@ -1411,7 +1307,7 @@ y = df["Exited"].astype(int)
 X = df.drop(columns=["Exited","RowNumber","CustomerId","Surname"], errors="ignore")
 
 X_train, X_test, y_train, y_test = train_test_split(
-  X, y, test_size=0.2, stratify=y, random_state=SEED
+  X, y, test_size=test_size, stratify=y, random_state=SEED
 )
 
 num_cols = X_train.select_dtypes(include=["int64","float64","int32","float32"]).columns.tolist()
@@ -1441,16 +1337,16 @@ if hasattr(pipe.named_steps["clf"], "predict_proba"):
 else:
   dec = pipe.decision_function(X_test)
   y_score = (dec - dec.min())/(dec.max()-dec.min()+1e-9)
-y_pred = (y_score >= 0.5).astype(int)
+y_pred = (y_score >= thr).astype(int)
 
-print("\n=== Evaluasi Test (threshold=0.5) ===")
-print(f"ROC-AUC   : {roc_auc_score(y_test, y_score):.3f}")
-print(f"Accuracy  : {accuracy_score(y_test, y_pred):.3f}")
-print(f"Precision : {precision_score(y_test, y_pred, zero_division=0):.3f}")
-print(f"Recall    : {recall_score(y_test, y_pred, zero_division=0):.3f}")
-print(f"F1-Score  : {f1_score(y_test, y_pred, zero_division=0):.3f}")
-print("\nConfusion Matrix:\n", confusion_matrix(y_test, y_pred))
-print("\nClassification Report:\n", classification_report(y_test, y_pred, zero_division=0))
+st.write("\n Evaluasi Test (threshold=0.5)")
+st.write(f"ROC-AUC   : {roc_auc_score(y_test, y_score):.3f}")
+st.write(f"Accuracy  : {accuracy_score(y_test, y_pred):.3f}")
+st.write(f"Precision : {precision_score(y_test, y_pred, zero_division=0):.3f}")
+st.write(f"Recall    : {recall_score(y_test, y_pred, zero_division=0):.3f}")
+st.write(f"F1-Score  : {f1_score(y_test, y_pred, zero_division=0):.3f}")
+st.write("\nConfusion Matrix:\n", confusion_matrix(y_test, y_pred))
+st.write("\nClassification Report:\n", classification_report(y_test, y_pred, zero_division=0))
 
 # Hitung confusion matrix
 cm = confusion_matrix(y_test, y_pred)
@@ -1593,13 +1489,13 @@ def metrics_at_threshold(y_true, y_prob, thr_val):
 res_05 = metrics_at_threshold(y_test, y_score, 0.50)
 res_y  = metrics_at_threshold(y_test, y_score, thr_youden)
 
-print("\n=== Metrics @ threshold 0.50 ===")
-print(f"ACC={res_05['ACC']:.3f}  PRE={res_05['PRE']:.3f}  REC={res_05['REC']:.3f}  F1={res_05['F1']:.3f}")
-print("Confusion Matrix:\n", res_05["CM"])
+st.write("\n Metrics @ threshold 0.50")
+st.write(f"ACC={res_05['ACC']:.3f}  PRE={res_05['PRE']:.3f}  REC={res_05['REC']:.3f}  F1={res_05['F1']:.3f}")
+st.write("Confusion Matrix:\n", res_05["CM"])
 
-print(f"\n=== Metrics @ threshold Youden* ({thr_youden:.3f}) ===")
-print(f"ACC={res_y['ACC']:.3f}  PRE={res_y['PRE']:.3f}  REC={res_y['REC']:.3f}  F1={res_y['F1']:.3f}")
-print("Confusion Matrix:\n", res_y["CM"])
+st.write(f"\n Metrics @ threshold Youden* ({thr_youden:.3f})")
+st.write(f"ACC={res_y['ACC']:.3f}  PRE={res_y['PRE']:.3f}  REC={res_y['REC']:.3f}  F1={res_y['F1']:.3f}")
+st.write("Confusion Matrix:\n", res_y["CM"])
 
 # Heatmap untuk threshold Youden
 labels = ["No Churn", "Churn"]
@@ -1641,7 +1537,7 @@ imp = (pd.DataFrame({"feature": feat_names_out, "importance": r.importances_mean
   .sort_values("importance", ascending=False)
   .head(20))
 
-print(imp.to_string(index=False))
+st.write(imp.to_string(index=False))
 
 plt.figure(figsize=(8,6))
 plt.barh(imp["feature"][::-1], imp["importance"][::-1])
@@ -1660,7 +1556,6 @@ PDP/ICE tidak penting untuk menjelaskan keputusan model dan mendapatkan insight 
 """
 
 # Partial Dependence (PDP/ICE) untuk fitur kunci
-from sklearn.inspection import PartialDependenceDisplay
 
 # pilih beberapa fitur numerik asli (bukan hasil OHE)
 focus_feats = [c for c in ["Age","CreditScore","Balance","NumOfProducts","Tenure"] if c in X.columns]
@@ -1678,10 +1573,6 @@ if focus_feats:
 
 Singkatnya, ini adalah tahap interpretasi akhir untuk menegaskan fitur kunci model setelah semua evaluasi performa selesai.
 """
-
-from sklearn.inspection import permutation_importance
-import pandas as pd
-import matplotlib.pyplot as plt
 
 # Hitung permutation importance
 r = permutation_importance(pipe, X_test, y_test,
@@ -1716,8 +1607,6 @@ plt.show()
 """
 
 # Lift & Cumulative Gain (butuh scikit-plot)
-import numpy as np
-import matplotlib.pyplot as plt
 
 # Helper ambil skor positif dari pipeline/model apa pun
 def get_positive_scores(estimator, X):
@@ -1784,11 +1673,10 @@ for d in deciles:
   caught = y_sorted[:k].sum()
   gain = caught / pos
   rows.append([int(d*100), k, caught, gain])
-
-import pandas as pd
+    
 lift_table = pd.DataFrame(rows, columns=["% Sampel", "N Ditarget", "Churn Tertangkap", "Cumulative Gain"])
-print("\n=== Tabel Gain per-Decile ===")
-print(lift_table.to_string(index=False, formatters={"Cumulative Gain": "{:.3f}".format}))
+st.write("\n Tabel Gain per-Decile")
+st.write(lift_table.to_string(index=False, formatters={"Cumulative Gain": "{:.3f}".format}))
 
 """Interpretasinya jadi seperti ini:
 1. Cumulative Gain
@@ -1818,16 +1706,13 @@ Dilanjutkan ke DALEX karena tujuannya adalah melakukan interpretasi global dan l
 # kalau belum terpasang
 # %pip install -q dalex
 
-import numpy as np
-import dalex as dx
-
 # Check if DALEX is available
 try:
     import dalex as dx
     HAS_DALEX = True
 except ImportError:
     HAS_DALEX = False
-    print("DALEX not installed. Skipping DALEX interpretation.")
+    st.write("DALEX not installed. Skipping DALEX interpretation.")
 
 
 if HAS_DALEX and hasattr(pipe.named_steps["clf"], "predict_proba"):
@@ -1837,14 +1722,14 @@ if HAS_DALEX and hasattr(pipe.named_steps["clf"], "predict_proba"):
     label="ChurnModel"
   )
   vi = explainer.model_parts(loss_function="auc")  # kontribusi variabel ke AUC
-  print("\nDALEX – Variable Importance (head):")
-  print(vi.result.head(10))
+  st.write("\nDALEX – Variable Importance (head):")
+  st.write(vi.result.head(10))
 
   vp = explainer.model_profile(variables=focus_feats or num_cols[:3])
 
   # DALEX plot
   if vp:
-    print("\nDALEX – Variable Profile (Partial Dependence) plots:")
+    st.write("\nDALEX – Variable Profile (Partial Dependence) plots:")
     vp.plot()
 
 """Interpretasi Grafik
@@ -1861,11 +1746,11 @@ if HAS_DALEX and hasattr(pipe.named_steps["clf"], "predict_proba"):
 """
 
 if 'imp' in locals():
-  print("\nTop Features and their Importance:")
+  st.write("\nTop Features and their Importance:")
   for index, row in imp.iterrows():
-    print(f"- {row['feature']} memiliki pengaruh {row['importance']:.3f} terhadap churn")
+    st.write(f"- {row['feature']} memiliki pengaruh {row['importance']:.3f} terhadap churn")
 else:
-  print("Feature importance results ('imp' DataFrame) not found. Please run the permutation importance cell first.")
+  st.write("Feature importance results ('imp' DataFrame) not found. Please run the permutation importance cell first.")
 
 """#Insight Actionable untuk Bank
 1. Segmentasi & Retensi Saldo Rendah
@@ -1888,9 +1773,7 @@ else:
 """
 
 # IDENTIFIKASI FAKTOR KUNCI
-import numpy as np, pandas as pd
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
+
 try:
   from xgboost import XGBClassifier
   HAS_XGB = True
@@ -1944,11 +1827,11 @@ imp_group = (imp_ohe_df.assign(Base=imp_ohe_df["Feature_OHE"].apply(to_base_name
   .sort_values("Importance", ascending=False)
   .reset_index(drop=True))
 
-print("\n=== TOP 10 FAKTOR KUNCI (agregasi per fitur mentah) ===")
-print(imp_group.head(10).to_string(index=False, formatters={"Importance":"{:.4f}".format}))
+st.write("\n TOP 10 FAKTOR KUNCI (agregasi per fitur mentah)")
+st.write(imp_group.head(10).to_string(index=False, formatters={"Importance":"{:.4f}".format}))
 
-print("\n=== TOP 10 DETAIL KATEGORI (setelah OHE) ===")
-print(imp_ohe_df.head(10).to_string(index=False, formatters={"Importance":"{:.4f}".format}))
+st.write("\n TOP 10 DETAIL KATEGORI (setelah OHE)")
+st.write(imp_ohe_df.head(10).to_string(index=False, formatters={"Importance":"{:.4f}".format}))
 
 # rekomendasi aksi ringan berbasis nama fitur (tanpa komputasi berat)
 def recommend(feat):
@@ -1977,5 +1860,5 @@ topk = 8
 insight = imp_group.head(topk).copy()
 insight["Recommended_Action"] = insight["Base"].apply(recommend)
 
-print("\n=== INSIGHT & AKSI (ringkas untuk manajemen) ===")
-print(insight.to_string(index=False, formatters={"Importance":"{:.4f}".format}))
+st.write("\n INSIGHT & AKSI (ringkas untuk manajemen)")
+insight.to_string(index=False, formatters={"Importance":"{:.4f}".format})
