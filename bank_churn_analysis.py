@@ -939,8 +939,7 @@ models = {
         subsample=0.9, colsample_bytree=0.9,
         reg_lambda=1.0, random_state=seed,
         n_jobs=-1, eval_metric="logloss", tree_method="hist"
-    ),
-}
+    )}
 
 pipelines = {
     name: Pipeline([("prep", preprocessor), ("clf", mdl)]) for name, mdl in models.items()
