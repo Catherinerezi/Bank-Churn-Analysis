@@ -1341,18 +1341,21 @@ preprocess = ColumnTransformer([
 ])
 
 # Kandidat model
+CV_K = 3 if FAST else 5 
+
 models = {
-  "LogReg": LogisticRegression(max_iter=1000, class_weight="balanced", random_state=seed),
-  # probability=False agar cepat; AUC pakai decision_function
-  "SVM-RBF": SVC(kernel="rbf", C=1.0, gamma="scale", class_weight="balanced", probability=False, random_state=seed),
-  "DecisionTree": DecisionTreeClassifier(random_state=seed, class_weight="balanced"),
-  "RandomForest": RandomForestClassifier(n_estimators=300, random_state=seed, n_jobs=-1, class_weight="balanced_subsample"),
+    "LogReg": LogisticRegression(max_iter=1000, n_jobs=None, solver="lbfgs"),
+    "RandomForest": RandomForestClassifier(
+        n_estimators=300, random_state=seed, n_jobs=-1,
+        class_weight="balanced_subsample"
+    ),
+    "XGBoost": XGBClassifier(
+        n_estimators=250, max_depth=6, learning_rate=0.1,
+        subsample=0.9, colsample_bytree=0.9,
+        eval_metric="logloss", tree_method="hist",
+        random_state=seed, n_jobs=1
+    ) if HAS_XGB else None,
 }
-if HAS_XGB:
-  models["XGBoost"] = XGBClassifier(
-    n_estimators=400, max_depth=5, learning_rate=0.05,
-    subsample=0.9, colsample_bytree=0.9, reg_lambda=1.0,
-    eval_metric="auc", random_state=seed, n_jobs=-1, tree_method="hist")
 
 """Pemilihan Kandidat Model:
 - Model dipilih untuk mewakili beragam pendekatan algoritmik pada data tabular, sehingga evaluasi mencakup metode linier, non-linier, pohon keputusan, dan ensemble.
