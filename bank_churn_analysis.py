@@ -1370,7 +1370,9 @@ except NameError:
     y_score = (dec - dec.min()) / (dec.max() - dec.min() + 1e-9)
 
 # ROC Curve + Youden point
-fpr, tpr, thr = roc_curve(y_test, y_score)
+fpr, tpr, thr_roc = roc_curve(y_test, y_score)
+youden_idx = np.argmax(tpr - fpr)
+thr_youden = float(thr_roc[youden_idx])
 auc_val = roc_auc_score(y_test, y_score)
 
 # Youden's J statistic: tpr - fpr
@@ -1557,6 +1559,7 @@ PDP/ICE tidak penting untuk menjelaskan keputusan model dan mendapatkan insight 
 # Partial Dependence (PDP/ICE) untuk fitur kunci
 
 # pilih beberapa fitur numerik asli (bukan hasil OHE)
+focus_feats = [c for c in ["Age","CreditScore","Balance","NumOfProducts","Tenure"] if c in X.columns]
 if focus_feats:
     for f in focus_feats:
         fig, ax = plt.subplots(figsize=(5.5, 4.2))
@@ -1666,7 +1669,16 @@ st.pyplot(fig)
 # Tabel per-decile untuk laporan bisnis
 # Menunjukkan berapa % churn tertangkap jika menargetkan top 10%, 20%, ... dari skor
 deciles = np.linspace(0.1, 1.0, 10)
-rows = []
+y_pred = (y_score >= thr).astype(int)
+rows.append([
+    name,
+    auc_val,
+    accuracy_score(y_test, y_pred),
+    precision_score(y_test, y_pred, zero_division=0),
+    recall_score(y_test, y_pred, zero_division=0),
+    f1_score(y_test, y_pred, zero_division=0),
+    confusion_matrix(y_test, y_pred).tolist()
+])
 for d in deciles:
   k = int(np.ceil(d * n))
   caught = y_sorted[:k].sum()
