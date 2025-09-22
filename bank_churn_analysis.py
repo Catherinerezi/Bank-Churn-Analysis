@@ -926,7 +926,7 @@ preprocessor = ColumnTransformer(
 )
 
 # 2) Definisikan SEMUA pipeline model (supaya seragam & anti-leakage)
-models = {
+models = (
     "Dummy(stratified)": DummyClassifier(strategy="stratified", random_state=seed,
     "LogReg": LogisticRegression(max_iter=1000, class_weight="balanced", random_state=seed),
     "SVM-RBF": SVC(kernel="rbf", gamma="scale", C=1.0, probability=True, class_weight="balanced", random_state=seed),
@@ -939,7 +939,7 @@ models = {
         subsample=0.9, colsample_bytree=0.9,
         reg_lambda=1.0, random_state=seed,
         n_jobs=-1, eval_metric="logloss", tree_method="hist"
-    )}
+    ))
 
 pipelines = {
     name: Pipeline([("prep", preprocessor), ("clf", mdl)]) for name, mdl in models.items()
