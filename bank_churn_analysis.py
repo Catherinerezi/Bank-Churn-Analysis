@@ -62,7 +62,7 @@ df = load_df(uploaded)
 ##Data Understanding
 """
 
-df.shape
+st.write(df.shape)
 
 """Ada beberapa yang sebaiknya disesuaikan:
 - ID/indeks (RowNumber, CustomerId) → string (identifier, bukan nilai numerik).
@@ -367,7 +367,7 @@ df = df.copy()
 df["Churn_label"] = df[target_col].map({0: "No", 1: "Yes"}).astype("category")
 
 # Boxplot: EstimatedSalary vs Churn
-plt.figure(figsize=(6,4))
+fig, ax = plt.subplots(figsize=(6,4))
 sns.boxplot(data=df, x="Churn_label", y="EstimatedSalary", palette="viridis", showfliers=False)
 plt.title("EstimatedSalary vs Churn")
 plt.xlabel("Churn")
@@ -849,40 +849,27 @@ if HAS_XGB:
 
 # Train, evaluasi, dan ROC plot
 rows = []
-plt.figure(figsize=(7,6))
+fig, ax = plt.subplots(figsize=(7,6))
+
 for name, clf in models.items():
-  pipe = Pipeline([("prep", preprocess), ("clf", clf)])
-  pipe.fit(X_train, y_train)
+    pipe = Pipeline([("prep", preprocess), ("clf", clf)])
+    pipe.fit(X_train, y_train)
 
-  # skor probabilitas positif
-  if hasattr(pipe.named_steps["clf"], "predict_proba"):
-    y_score = pipe.predict_proba(X_test)[:, 1]
-  else:
-    dec = pipe.decision_function(X_test)
-    y_score = (dec - dec.min()) / (dec.max() - dec.min() + 1e-9)
+    if hasattr(pipe.named_steps["clf"], "predict_proba"):
+        y_score = pipe.predict_proba(X_test)[:, 1]
+    else:
+        dec = pipe.decision_function(X_test)
+        y_score = (dec - dec.min()) / (dec.max() - dec.min() + 1e-9)
 
-  y_pred = (y_score >= thr).astype(int)
+    fpr, tpr, _ = roc_curve(y_test, y_score)
+    auc_val = roc_auc_score(y_test, y_score)
+    ax.plot(fpr, tpr, lw=2, label=f"{name} (AUC={auc_val:.3f})")
 
-  # metrik
-  auc_val = roc_auc_score(y_test, y_score)
-  acc = accuracy_score(y_test, y_pred)
-  prec = precision_score(y_test, y_pred, zero_division=0)
-  rec = recall_score(y_test, y_pred, zero_division=0)
-  f1 = f1_score(y_test, y_pred, zero_division=0)
-  cm = confusion_matrix(y_test, y_pred)
+ax.plot([0,1], [0,1], "--", lw=1.2, label="Baseline")
+ax.set_title("ROC Curve – Churn (anti-leakage)")
+ax.set_xlabel("False Positive Rate"); ax.set_ylabel("True Positive Rate")
+ax.legend(loc="lower right"); ax.grid(alpha=0.3, linestyle="--")
 
-  rows.append([name, auc_val, acc, prec, rec, f1, cm.tolist()])
-
-  # ROC
-  fpr, tpr, _ = roc_curve(y_test, y_score)
-  plt.plot(fpr, tpr, lw=2, label=f"{name} (AUC={auc_val:.3f})")
-
-# baseline
-fig, ax = plt.subplots(figsize=(6,4))
-plt.plot([0,1],[0,1], linestyle="--", lw=1.2, label="Baseline")
-plt.title("ROC Curve – Churn (anti-leakage)")
-plt.xlabel("False Positive Rate"); plt.ylabel("True Positive Rate")
-plt.legend(loc="lower right"); plt.grid(alpha=0.3, linestyle="--"); plt.tight_layout()
 st.pyplot(fig)
 
 # Tabel ringkas metrik
@@ -926,20 +913,20 @@ preprocessor = ColumnTransformer(
 )
 
 # 2) Definisikan SEMUA pipeline model (supaya seragam & anti-leakage)
-models = (
-    "Dummy(stratified)": DummyClassifier(strategy="stratified", random_state=seed,
+models = {
+    "Dummy(stratified)": DummyClassifier(strategy="stratified", random_state=seed),
     "LogReg": LogisticRegression(max_iter=1000, class_weight="balanced", random_state=seed),
     "SVM-RBF": SVC(kernel="rbf", gamma="scale", C=1.0, probability=True, class_weight="balanced", random_state=seed),
     "DecisionTree": DecisionTreeClassifier(random_state=seed, class_weight="balanced"),
-    "RandomForest": RandomForestClassifier(
-        n_estimators=300, random_state=seed, n_jobs=-1, class_weight="balanced_subsample"
-    ),
+    "RandomForest": RandomForestClassifier(n_estimators=300, random_state=seed, n_jobs=-1, class_weight="balanced_subsample"),
     "XGBoost": XGBClassifier(
         n_estimators=400, max_depth=5, learning_rate=0.05,
-        subsample=0.9, colsample_bytree=0.9,
-        reg_lambda=1.0, random_state=seed,
-        n_jobs=-1, eval_metric="logloss", tree_method="hist"
-    )
+        subsample=0.9, colsample_bytree=0.9, reg_lambda=1.0,
+        random_state=seed, n_jobs=-1, eval_metric="logloss", tree_method="hist"
+    ) if HAS_XGB else None,
+}
+# drop the None when XGB isn't available
+models = {k: v for k, v in models.items() if v is not None}
 
 pipelines = {
     name: Pipeline([("prep", preprocessor), ("clf", mdl)]) for name, mdl in models.items()
@@ -1570,13 +1557,13 @@ PDP/ICE tidak penting untuk menjelaskan keputusan model dan mendapatkan insight 
 # Partial Dependence (PDP/ICE) untuk fitur kunci
 
 # pilih beberapa fitur numerik asli (bukan hasil OHE)
-focus_feats = [c for c in ["Age","CreditScore","Balance","NumOfProducts","Tenure"] if c in X.columns]
 if focus_feats:
-  for f in focus_feats:
-    fig, ax = plt.figure(figsize=(5.5,4.2))
-    PartialDependenceDisplay.from_estimator(pipe, X, [f], kind="both", grid_resolution=30)
-    plt.title(f"PDP/ICE – {f}")
-    plt.tight_layout(); st.pyplot(fig)
+    for f in focus_feats:
+        fig, ax = plt.subplots(figsize=(5.5, 4.2))
+        PartialDependenceDisplay.from_estimator(pipe, X, [f], kind="both", grid_resolution=30, ax=ax)
+        ax.set_title(f"PDP/ICE – {f}")
+        plt.tight_layout()
+        st.pyplot(fig)
 
 """Mengulang analisis feature importance (Permutation Importance) tapi kali ini langsung menggunakan X_test tanpa memperlihatkan detail OHE, lalu divisualisasikan dalam bentuk bar chart Top-20 supaya:
   - Lebih ringkas dan fokus – langsung melihat fitur yang paling berpengaruh pada model di data uji.
