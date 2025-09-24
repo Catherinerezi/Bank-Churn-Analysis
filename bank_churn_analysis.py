@@ -1122,7 +1122,7 @@ search_spaces["LogReg"] = {
 
 # SVM-RBF
 search_spaces["SVM-RBF"] = {
-  "estimator": SVC(kernel="rbf", class_weight="balanced", probability=True, random_state=seed),
+  "estimator": SVC(kernel="rbf", class_weight="balanced", probability=False, random_state=seed),
   "params": {
     "clf__C": np.logspace(-2, 2, 30),
     "clf__gamma": np.logspace(-4, 1, 30),
@@ -1373,33 +1373,38 @@ cv = StratifiedKFold(n_splits=CV_K, shuffle=True, random_state=seed)
 rows, fitted = [], {}
 
 for name, clf in models.items():
-  pipe = Pipeline([("prep", preprocess), ("clf", clf)])
+    pipe = Pipeline([("prep", preprocess), ("clf", clf)])
 
-  # CV ROC-AUC di training
-  cv_auc = cross_val_score(pipe, Xtrain_used, ytrain_used, cv=cv, scoring="roc_auc", n_jobs=1)
-  pipe.fit(Xtrain_used, ytrain_used)
+    if FAST:
+        cv_auc_mean, cv_auc_std = np.nan, np.nan
+        pipe.fit(Xtrain_used, ytrain_used)
+    else:
+        cv_scores = cross_val_score(
+            pipe, Xtrain_used, ytrain_used,
+            cv=cv, scoring="roc_auc", n_jobs=1
+        )
+        cv_auc_mean, cv_auc_std = cv_scores.mean(), cv_scores.std()
+        pipe.fit(Xtrain_used, ytrain_used)
 
-  # Skor probabilitas untuk test AUC
-  if hasattr(pipe.named_steps["clf"], "predict_proba"):
-    y_score = pipe.predict_proba(X_test)[:, 1]
-  else:
-    dec = pipe.decision_function(X_test)
-    # normalisasi ke [0,1] agar kompatibel untuk AUC (opsional)
-    y_score = (dec - dec.min()) / (dec.max() - dec.min() + 1e-9)
+    if hasattr(pipe.named_steps["clf"], "predict_proba"):
+        y_score = pipe.predict_proba(X_test)[:, 1]
+    else:
+        dec = pipe.decision_function(X_test)
+        y_score = (dec - dec.min()) / (dec.max() - dec.min() + 1e-9)
 
-  y_pred = (y_score >= thr).astype(int)
+    y_pred = (y_score >= thr).astype(int)
 
-  rows.append({
-    "Model": name,
-    "CV_ROC_AUC_mean": cv_auc.mean(),
-    "CV_ROC_AUC_std":  cv_auc.std(),
-    "Test_ROC_AUC":    roc_auc_score(y_test, y_score),
-    "Test_Accuracy":   accuracy_score(y_test, y_pred),
-    "Test_Precision":  precision_score(y_test, y_pred, zero_division=0),
-    "Test_Recall":     recall_score(y_test, y_pred, zero_division=0),
-    "Test_F1":         f1_score(y_test, y_pred, zero_division=0),
-  })
-  fitted[name] = pipe
+    rows.append({
+        "Model": name,
+        "CV_ROC_AUC_mean": cv_auc_mean,
+        "CV_ROC_AUC_std":  cv_auc_std,
+        "Test_ROC_AUC":    roc_auc_score(y_test, y_score),
+        "Test_Accuracy":   accuracy_score(y_test, y_pred),
+        "Test_Precision":  precision_score(y_test, y_pred, zero_division=0),
+        "Test_Recall":     recall_score(y_test, y_pred, zero_division=0),
+        "Test_F1":         f1_score(y_test, y_pred, zero_division=0),
+    })
+    fitted[name] = pipe
 
 results_df = pd.DataFrame(rows).sort_values("Test_ROC_AUC", ascending=False)
 st.write("\n Perbandingan Model (urut AUC test)")
