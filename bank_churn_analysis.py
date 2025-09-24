@@ -2027,4 +2027,4 @@ insight = imp_group.head(topk).copy()
 insight["Recommended_Action"] = insight["Base"].apply(recommend)
 
 st.write("\n INSIGHT & AKSI (ringkas untuk manajemen)")
-insight.to_string(index=False, formatters={"Importance":"{:.4f}".format})
+st.write(insight.to_string(index=False, formatters={"Importance":"{:.4f}".format}))
