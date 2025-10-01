@@ -50,6 +50,8 @@ This notebook works like a small investigation file: each row is a customer snap
 
 **Cumulative Gain shows** how many churners we can catch if we only contact the highest-risk customers first. Our curve climbs far above the random baseline, meaning a small, focused campaign can recover most churn risk without messaging everyone.
 
+We built with a leak-proof pipeline (fit on train only, stratified split, one hot + scaling), then computed gains on the held-out test set to make the curve reflects true generalization.
+
 <p align="center">
   <img src="https://github.com/Catherinerezi/Bank-Churn-Analysis/blob/main/assets/CumulativeGain.png" alt="Cumulative Gain: model vs baseline" width="560">
 </p>
@@ -82,3 +84,15 @@ This notebook works like a small investigation file: each row is a customer snap
 - Top **10%** captures **~XX%** of churn (lift about **L1×**).  
 - Top **20%** captures **~YY%** of churn (lift about **L2×**).  
 - Gains **flatten after ~KK%** coverage; by **50%**, we’ve already caught **~ZZ%** of churn.
+
+**Why it matters:**
+- Target size: choose the smallest % that hits your capture goal (e.g., 20% list  caught about 60% churn).
+- Budget & ops: fewer messages, lower spend, less customer fatigue.
+- Policy: start with top-k targeting (e.g., top 20%) for campaigns, keep ROC/Youden for thresholding when you need hard “churn / not churn” decisions in a product.
+
+## How big is the problem?
+
+**Churn Distribution** shows how many customers left vs stayed. This baseline matters because it sets the difficulty of the task: if churn is a minority class, naive accuracy can look high while missing most churners. We use this view to size the problem before modeling.
+
+Countplot built from the training split to prevent peeking (labels come from y_train in the notebook).
+
