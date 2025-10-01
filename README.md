@@ -4,7 +4,7 @@ Imagine we’re detectives in a bank, combing through thousands of customer brea
 
 # Understanding Our Generals
 
-This notebook works like a small investigation file: each row is a customer snapshot: who they are, which bank they trusted the most, what products they hold, and whether they left. Before any modeling or visualization, we profile, clean, and enrich the fields below so downstream findings are trustworthy, reproducible, and actionable.
+This notebook works like a small investigation file: each row is a customer snapshot: who they are, which bank they trusted the most, what products they hold, and whether they left or stay. Before any modeling or visualization, we profile, clean, and enrich the fields below so downstream findings are trustworthy, reproducible, and actionable.
 
 | Column           | Type        | Meaning                            | Notes & Handling |
 |------------------|-------------|------------------------------------|------------------|
@@ -18,7 +18,59 @@ This notebook works like a small investigation file: each row is a customer snap
 | `Tenure`         | `int`       | Years with the bank                | Keep integer; derive `Tenure_per_Age` for loyalty context |
 | `Balance`        | `float`     | Account balance                    | Skewed; consider winsorizing/clamping; create `HighBalance`; ratio `Balance_to_Salary` |
 | `NumOfProducts`  | `int`       | Number of bank products held       | Discrete count; consider interaction `Products_x_Active` |
-| `HasCrCard`      | `bool`      | Owns a credit card (0/1)           | Map `{0,1}→{False,True}`; ensure boolean dtype |
+| `HasCrCard`      | `bool`      | Owns a credit card (0/1)           | Map `{0,1}` to `{False,True}`; ensure boolean dtype |
 | `IsActiveMember` | `bool`      | Active membership flag (0/1)       | Map to boolean; key engagement signal |
 | `EstimatedSalary`| `float`     | Estimated annual salary            | Check scale/units; use in ratios (`Balance_to_Salary`) |
 | `Exited`         | `int (0/1)` | Churn label (1 = churned)          | **Target variable**; exclude from features; use for stratified splits & evaluation |
+
+**General quality checks**
+- Fix identifiers:
+  - Cast to `str`
+  - categoricals to `category`
+  - binary fields to `bool`
+- Impute:
+  - median for numeric
+  - `"Unknown"` for categorical
+  - one-hot encode with `handle_unknown="ignore"`
+- Prevent leakage:
+  - fit preprocessing on **train only**
+  - drop ID/text columns before modeling
+- Quality checks:
+  - missing-value audit
+  - type coercion
+  - outlier review
+  - class-balance review (use stratification)
+
+# Attachments
+- [Data Processing](https://colab.research.google.com/drive/1YfTZZpgwdG_dvaVgbFUF0JDxaaQRJXm8#scrollTo=6O3l7ZT0wMZd)
+
+# What we bring to the table?
+
+## Why the model is useful (via Cumulative Gain)?
+
+**Cumulative Gain shows** how many churners we can catch if we only contact the highest-risk customers first. Our curve climbs far above the random baseline, meaning a small, focused campaign can recover most churn risk without messaging everyone.
+
+**How to read it?**
+- Baseline (diagonal line): contacting k% of customers at random catches k% of churners.
+- Model curve (ours): the higher and steeper it is above the baseline, especially in the first 10–30%, the more efficient our targeting.
+- Elbow point: where the curve starts flattening, we got this in diminishing returns; past this, extra budget catch smaller gains.
+- Lift at k%: gain divided by k. A lift of 3 at 20%, means we’re 3× better than random in that slice.
+
+**What we observed?**
+
+| % Sampel | N Target | Churn Catch | Cumulative Gain | Lift |
+|---------:|---------:|------------:|----------------:|-----:|
+| 10       | 200      | 158         | 0.388           | 3.88 |
+| 20       | 400      | 245         | 0.602           | 3.01 |
+| 30       | 601      | 301         | 0.740           | 2.47 |
+| 40       | 800      | 334         | 0.821           | 2.05 |
+| 50       | 1000     | 356         | 0.875           | 1.75 |
+| 60       | 1200     | 373         | 0.916           | 1.53 |
+| 70       | 1401     | 391         | 0.961           | 1.37 |
+| 80       | 1600     | 400         | 0.983           | 1.23 |
+| 90       | 1800     | 402         | 0.988           | 1.10 |
+| 100      | 2000     | 407         | 1.000           | 1.00 |
+
+- Top **10%** captures **~XX%** of churn (lift about **L1×**).  
+- Top **20%** captures **~YY%** of churn (lift about **L2×**).  
+- Gains **flatten after ~KK%** coverage; by **50%**, we’ve already caught **~ZZ%** of churn.
