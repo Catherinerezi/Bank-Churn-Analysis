@@ -50,6 +50,10 @@ This notebook works like a small investigation file: each row is a customer snap
 
 **Cumulative Gain shows** how many churners we can catch if we only contact the highest-risk customers first. Our curve climbs far above the random baseline, meaning a small, focused campaign can recover most churn risk without messaging everyone.
 
+<p align="center">
+  <img src="https://github.com/Catherinerezi/Bank-Churn-Analysis/blob/main/assets/CumulativeGain.png" alt="Cumulative Gain: model vs baseline" width="560">
+</p>
+
 **How to read it?**
 - Baseline (diagonal line): contacting k% of customers at random catches k% of churners.
 - Model curve (ours): the higher and steeper it is above the baseline, especially in the first 10–30%, the more efficient our targeting.
@@ -57,6 +61,10 @@ This notebook works like a small investigation file: each row is a customer snap
 - Lift at k%: gain divided by k. A lift of 3 at 20%, means we’re 3× better than random in that slice.
 
 **What we observed?**
+
+<p align="center">
+  <img src="https://github.com/Catherinerezi/Bank-Churn-Analysis/blob/main/assets/Lift%20Curve.png" alt="Cumulative Gain: model vs baseline" width="560">
+</p>
 
 | % Sampel | N Target | Churn Catch | Cumulative Gain | Lift |
 |---------:|---------:|------------:|----------------:|-----:|
