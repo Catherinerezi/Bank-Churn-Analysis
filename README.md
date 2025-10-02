@@ -115,7 +115,7 @@ Countplot built from the training split to prevent peeking (labels come from `y_
 - We consider class weights and threshold tuning (Youden’s J) so the model doesn’t miss churners.
 - For business ops, the base rate anchors expected campaign volume (e.g., if churn about 20%, "catching half" means about 10% of customers).
 
-**Where the churn concentrates (via Number of Products)?**
+## Where the churn concentrates (via Number of Products)
 
 **This barchart below** asks a simple question: *does holding more (or fewer) products relate to churn?*  
 It’s a practical lens because it points straight at segments we can act on—bundling, cross-sell, or retention offers.
@@ -126,7 +126,7 @@ Built from the training split (no leakage). Encoding and preprocessing follow th
   <img src="https://github.com/Catherinerezi/Bank-Churn-Analysis/blob/main/assets/NumOfProducts.png" alt="Churn by Number of Products" width="520">
 </p>
 
-**How to read it**
+**How to read it?**
 - Bars show the **churn rate per product count** = the dashed line is the overall churn rate.
 - Bars **above the line** = segments churning more than average (priority for retention).
 - Bars **below the line** = segments churning less than average.
@@ -140,3 +140,28 @@ Built from the training split (no leakage). Encoding and preprocessing follow th
 **Why it matters?**
 - Clear, actionable segmentation: prioritize 3–4 product holders for targeted save actions (proactive outreach, fee waivers, tailored bundles).
 - Pairs well with **Cumulative Gain** for sizing how many customers to contact, and with threshold tuning for who to contact first.
+
+## How churn risk moves with Age (via PDP/ICE)?
+
+**In this visualization below**, age isn’t just a number here—it shapes how likely a customer is to leave.  
+Partial Dependence (PDP) shows the average effect of Age on churn probability, while ICE lines show how that effect varies for individual customers.
+
+PDP/ICE computed with the same, leak-proof pipeline used for modeling (train-only fit; applied on held-out data). PDP assumes “ceteris paribus”; interpret beyond observed age ranges with care.
+
+<p align="center">
+  <img src="https://github.com/Catherinerezi/Bank-Churn-Analysis/blob/main/assets/PDP%3AICEofAge.png" alt="PDP/ICE – Age vs churn probability" width="520">
+</p>
+
+**How to read it?**
+- **PDP line (bold):** average predicted churn across the dataset as Age changes (holding other features fixed by the model).
+- **ICE lines (thin):** individual trajectories with tight bundle = consistent effect, spread = the effect depends on other features.
+- **Slope & bends:** rising sections = higher churn risk with age, plateaus/declines = lower marginal effect.
+
+**What we observed (training/test)?**
+- Overall churn baseline  could seen in the approximately of **YY%**.  
+- Risk **rises from ~AA to ~BB years**, then **levels off/softens** beyond that range.  
+- ICE spread is **[low/moderate/high]** around **~CC–DD years**, suggesting interactions (e.g., activity level or product mix).
+
+**Why it matters**
+- Helps choose **age-aware retention** offers (e.g., onboarding nudges for younger segments, relationship benefits for older segments).
+- Confirms the model’s signal is **directionally plausible** (sanity check), or flags where it might be over/under-sensitive.
