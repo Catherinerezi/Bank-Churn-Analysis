@@ -114,3 +114,10 @@ Countplot built from the training split to prevent peeking (labels come from `y_
 - We rely on ROC-AUC instead of raw accuracy.
 - We consider class weights and threshold tuning (Youden’s J) so the model doesn’t miss churners.
 - For business ops, the base rate anchors expected campaign volume (e.g., if churn about 20%, "catching half" means about 10% of customers).
+
+**Where the churn concentrates (via Number of Products)?**
+
+**This barchart below** asks a simple question: *does holding more (or fewer) products relate to churn?*  
+It’s a practical lens because it points straight at segments we can act on—bundling, cross-sell, or retention offers.
+
+<sub>Built from the training split (no leakage). Encoding and preprocessing follow the same pipeline used in modeling.</sub>
