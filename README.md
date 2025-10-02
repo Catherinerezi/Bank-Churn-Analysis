@@ -120,4 +120,23 @@ Countplot built from the training split to prevent peeking (labels come from `y_
 **This barchart below** asks a simple question: *does holding more (or fewer) products relate to churn?*  
 It’s a practical lens because it points straight at segments we can act on—bundling, cross-sell, or retention offers.
 
-<sub>Built from the training split (no leakage). Encoding and preprocessing follow the same pipeline used in modeling.</sub>
+Built from the training split (no leakage). Encoding and preprocessing follow the same pipeline used in modeling.
+
+<p align="center">
+  <img src="https://github.com/Catherinerezi/Bank-Churn-Analysis/blob/main/assets/NumOfProducts.png" alt="Churn by Number of Products" width="520">
+</p>
+
+**How to read it**
+- Bars show the **churn rate per product count** = the dashed line is the overall churn rate.
+- Bars **above the line** = segments churning more than average (priority for retention).
+- Bars **below the line** = segments churning less than average.
+
+**What we observed (training set)?**
+- `NumOfProducts = 3` = churn rate ≈ **XX%**, **above** the overall rate (**YY%**).
+- `NumOfProducts = 4` = churn rate ≈ **AA%** (often sparse but high—watch sample size).
+- Segments `1–2` products are **below/near** average.
+- Together, the `3–4` product customers contribute **ZZ%** of all churn while representing only **QQ%** of customers.
+
+**Why it matters?**
+- Clear, actionable segmentation: prioritize 3–4 product holders for targeted save actions (proactive outreach, fee waivers, tailored bundles).
+- Pairs well with **Cumulative Gain** for sizing how many customers to contact, and with threshold tuning for who to contact first.
