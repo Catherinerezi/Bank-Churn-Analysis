@@ -94,5 +94,23 @@ We built with a leak-proof pipeline (fit on train only, stratified split, one ho
 
 **Churn Distribution** shows how many customers left vs stayed. This baseline matters because it sets the difficulty of the task: if churn is a minority class, naive accuracy can look high while missing most churners. We use this view to size the problem before modeling.
 
-Countplot built from the training split to prevent peeking (labels come from y_train in the notebook).
+Countplot built from the training split to prevent peeking (labels come from `y_train` in the notebook).
 
+<p align="center">
+  <img src="https://github.com/Catherinerezi/Bank-Churn-Analysis/blob/main/assets/ChurnDistribution.png" alt="Stayed vs Churned distribution" width="420">
+</p>
+
+**How to read the chart (signals)?**
+- Bars (Stayed vs Churned): height = count (or percent).
+- Imbalance cue: a much shorter “Churn” bar means fewer positives, means harder recall.
+
+**What we observed (training set)**
+- **Churn rate:** ~XX%  
+- **Stay rate:** ~(100–XX)%  
+- Pattern indicates **[moderate/strong] imbalance**, so we use class weights and calibrated thresholds.
+
+**Why it matters?**
+- We stratify train/test splits to keep this ratio consistent.
+- We rely on ROC-AUC instead of raw accuracy.
+- We consider class weights and threshold tuning (Youden’s J) so the model doesn’t miss churners.
+- For business ops, the base rate anchors expected campaign volume (e.g., if churn about 20%, "catching half" means about 10% of customers).
