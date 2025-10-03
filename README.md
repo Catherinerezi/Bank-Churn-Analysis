@@ -165,3 +165,27 @@ PDP/ICE computed with the same, leak-proof pipeline used for modeling (train-onl
 **Why it matters**
 - Helps choose **age-aware retention** offers (e.g., onboarding nudges for younger segments, relationship benefits for older segments).
 - Confirms the model’s signal is **directionally plausible** (sanity check), or flags where it might be over/under-sensitive.
+
+# What to do next?
+- **Adopt a Top-K policy:**
+  - Act on the top 20% risk segment first
+  - Size K by monthly budget/capacity, not by a fixed threshold.
+- **Tune to goal, not habit:**
+  - Pick thresholds by Youden’s J for balance,
+  - Or shift toward recall when the cost of missing churn is high.
+- **Prioritize high-impact slices:**
+  - Start with 3–4 products segment
+  - Design specific save actions (fee relief, bundle offers, proactive outreach).
+- **Make age-aware saves:**
+  - Use age-tailored messaging (onboarding nudges for younger, relationship/perk programs for older).
+- **Operationalize feedback loops:**
+  - After each campaign, feed outcomes (contacted, accepted, retained) back into training for ongoing lift.
+- **Monitor drift, not just accuracy:**
+  - Track lift in top deciles monthly
+  - Retrain when it falls materially.
+- **Keep the pipeline clean:**
+  - Train-only preprocessing, class weights, and stratified splits stay mandatory—no shortcuts.
+- **Mind ethics & policy:**
+  - Review use of sensitive attributes
+  - Keep IDs out of features
+  - Document decisions and thresholds for auditability.
