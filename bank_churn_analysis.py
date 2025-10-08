@@ -1887,7 +1887,7 @@ except ImportError:
     HAS_DALEX = False
     st.write("DALEX not installed. Skipping DALEX interpretation.")
     
-f HAS_DALEX:
+if HAS_DALEX:
     # pred function aman utk semua model (proba/decision/predict)
     def _predict(m, X_):
         if hasattr(m, "predict_proba"):
