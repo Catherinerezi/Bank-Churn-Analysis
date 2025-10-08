@@ -1886,7 +1886,9 @@ try:
 except ImportError:
     HAS_DALEX = False
     st.write("DALEX not installed. Skipping DALEX interpretation.")
-if HAS_DALEX:
+    
+f HAS_DALEX:
+    # pred function aman utk semua model (proba/decision/predict)
     def _predict(m, X_):
         if hasattr(m, "predict_proba"):
             proba = m.predict_proba(X_)
@@ -1903,25 +1905,73 @@ if HAS_DALEX:
         return m.predict(X_).astype(float)
 
     explainer = dx.Explainer(
-        model=pipe,
-        data=X_test,
-        y=y_test,
-        predict_function=_predict,
-        label="ChurnModel",
-        verbose=False,
+        model=pipe, data=X_test, y=y_test,
+        predict_function=_predict, label="ChurnModel", verbose=False
     )
 
- # Variable Importance (AUC dropout)
+    # Variable Importance (VI)
     vi = explainer.model_parts(loss_function="auc")
     st.write("\nDALEX – Variable Importance (head):")
     st.write(vi.result.head(10))
-    st.plotly_chart(vi.plot())
 
-# Variable Profile / PDP
-    focus_feats = [c for c in ["Age","CreditScore","Balance","NumOfProducts","Tenure"] if c in X_test.columns]
+    # coba pakai plotly dulu, kalau error -> fallback ke matplotlib
+    try:
+        import plotly.graph_objects as go
+        df_vi = vi.result.copy()
+        df_vi = df_vi[df_vi["variable"] != "_full_model_"].sort_values(
+            "dropout_loss", ascending=False
+        )
+        fig_vi = go.Figure(go.Bar(
+            x=df_vi["dropout_loss"],
+            y=df_vi["variable"],
+            orientation="h",
+            hovertemplate="dropout_loss=%{x:.4f}<extra>%{y}</extra>",
+        ))
+        fig_vi.update_layout(
+            title="DALEX – Variable Importance (dropout loss)",
+            xaxis_title="dropout_loss (AUC)",
+            yaxis_title="feature",
+            margin=dict(l=100, r=20, t=40, b=40),
+        )
+        st.plotly_chart(fig_vi, use_container_width=True)
+    except Exception:
+        df_vi = vi.result.copy()
+        df_vi = df_vi[df_vi["variable"] != "_full_model_"].sort_values(
+            "dropout_loss", ascending=False
+        )
+        fig, ax = plt.subplots(figsize=(7, max(4, 0.35 * len(df_vi))))
+        ax.barh(df_vi["variable"][::-1], df_vi["dropout_loss"][::-1])
+        ax.set_title("DALEX – Variable Importance (dropout loss)")
+        ax.set_xlabel("dropout_loss (AUC)")
+        ax.set_ylabel("feature")
+        plt.tight_layout()
+        st.pyplot(fig)
+
+    # Variable Profile / PDP
+    focus_feats = [c for c in ["Age","CreditScore","Balance","NumOfProducts","Tenure"]
+                   if c in X_test.columns]
     vp = explainer.model_profile(variables=focus_feats or num_cols[:3])
-    st.write("\nDALEX – Variable Profile (Partial Dependence) plots:")
-    st.plotly_chart(vp.plot())
+    df_vp = vp.result.copy()
+
+    try:
+        import plotly.express as px
+        for var in (focus_feats or num_cols[:3]):
+            sub = df_vp[df_vp["variable"] == var]
+            if {"_x_", "_yhat_"}.issubset(sub.columns):
+                fig_pdp = px.line(sub, x="_x_", y="_yhat_", title=f"DALEX – PDP: {var}",
+                                  labels={"_x_": var, "_yhat_": "predicted prob"})
+                st.plotly_chart(fig_pdp, use_container_width=True)
+    except Exception:
+        for var in (focus_feats or num_cols[:3]):
+            sub = df_vp[df_vp["variable"] == var]
+            if {"_x_", "_yhat_"}.issubset(sub.columns):
+                fig, ax = plt.subplots(figsize=(6, 4))
+                ax.plot(sub["_x_"], sub["_yhat_"])
+                ax.set_title(f"DALEX – PDP: {var}")
+                ax.set_xlabel(var); ax.set_ylabel("predicted prob")
+                ax.grid(alpha=0.3, linestyle="--")
+                plt.tight_layout()
+                st.pyplot(fig)
 
 """Interpretasi Grafik
 1. Variable Importance (dropout loss)
