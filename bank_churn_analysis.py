@@ -1196,6 +1196,7 @@ if RUN_TUNING:
     results = []
     best_fitted = {}
 
+    # HalvingRandomSearchCV untuk tiap model
     for name, spec in search_spaces.items():
         st.write(f"\n>>> HalvingRandomSearch (FAST) {name} ...")
         pipe = Pipeline([("prep", preprocess), ("clf", spec["estimator"])])
@@ -1217,37 +1218,42 @@ if RUN_TUNING:
 
         results.append({
             "Model": name,
-            "CV_ROC_AUC": hrs.best_score_,
+            "CV_ROC_AUC": float(hrs.best_score_),
             "BestParams": hrs.best_params_,
         })
         best_fitted[name] = hrs.best_estimator_
         st.write(f"Best CV AUC ({name}) = {hrs.best_score_:.3f}")
 
-    results_df = pd.DataFrame(results).sort_values("CV_ROC_AUC", ascending=False).reset_index(drop=True)
-    
-# Flatten kolom BestParams -> kolom2 lebar
-params_wide = pd.json_normalize(results_df["BestParams"]).rename(
-    columns=lambda c: c.replace("clf__", "")  # biar rapi, buang prefix 'clf__'
-)
+    # Rekap hasil HRS jadi tabel lebar yang enak dibaca
+    results_df = pd.DataFrame(results).sort_values(
+        "CV_ROC_AUC", ascending=False
+    ).reset_index(drop=True)
 
-# Gabungkan skor + params
-table_df = pd.concat(
-    [results_df[["Model", "CV_ROC_AUC"]].round(3), params_wide],
-    axis=1
-)
-st.write("**FAST Halving results (tabel):**")
-st.dataframe(table_df, use_container_width=True)
+    # Flatten kolom BestParams -> kolom2 lebar; rapikan nama param (hapus prefix 'clf__')
+    params_wide = pd.json_normalize(results_df["BestParams"]).rename(
+        columns=lambda c: c.replace("clf__", "")
+    )
 
-# versi ringkas satu kolom string
-results_df["BestParams (compact)"] = results_df["BestParams"].apply(
-    lambda d: ", ".join(f"{k.replace('clf__','')}={v}" for k, v in d.items())
-)
-st.write("**Ringkas:**")
-st.dataframe(results_df[["Model", "CV_ROC_AUC", "BestParams (compact)"]].round(3),
-             use_container_width=True)
+    table_df = pd.concat(
+        [results_df[["Model", "CV_ROC_AUC"]].round(3), params_wide],
+        axis=1
+    )
 
-    # --- Refit pemenang di FULL train & evaluasi test ---
-    best_name  = results_df.iloc[0]["Model"]
+    st.write("**FAST Halving results (tabel):**")
+    st.dataframe(table_df, use_container_width=True)
+
+    # Versi ringkas satu kolom string
+    results_df["BestParams (compact)"] = results_df["BestParams"].apply(
+        lambda d: ", ".join(f"{k.replace('clf__','')}={v}" for k, v in d.items())
+    )
+    st.write("**Ringkas:**")
+    st.dataframe(
+        results_df[["Model", "CV_ROC_AUC", "BestParams (compact)"]].round(3),
+        use_container_width=True
+    )
+
+    # Refit pemenang di FULL train & evaluasi test
+    best_name = results_df.iloc[0]["Model"]
     best_model = best_fitted[best_name]
     best_model.fit(X_train, y_train)
 
@@ -1259,19 +1265,23 @@ st.dataframe(results_df[["Model", "CV_ROC_AUC", "BestParams (compact)"]].round(3
         y_score = (dec - dec.min()) / (dec.max() - dec.min() + 1e-9)
     y_pred = (y_score >= thr).astype(int)
 
-    # metrik
-    st.write(f"\n Test metrics ({best_name})")
-    st.write(f"AUC : {roc_auc_score(y_test, y_score):.3f}")
-    st.write(f"ACC : {accuracy_score(y_test, y_pred):.3f}")
-    st.write(f"PRE : {precision_score(y_test, y_pred, zero_division=0):.3f}")
-    st.write(f"REC : {recall_score(y_test, y_pred, zero_division=0):.3f}")
-    st.write(f"F1  : {f1_score(y_test, y_pred, zero_division=0):.3f}")
+    # metrik (tabel)
+    test_table = pd.DataFrame([{
+        "Model": best_name,
+        "AUC": roc_auc_score(y_test, y_score),
+        "ACC": accuracy_score(y_test, y_pred),
+        "PRE": precision_score(y_test, y_pred, zero_division=0),
+        "REC": recall_score(y_test, y_pred, zero_division=0),
+        "F1":  f1_score(y_test, y_pred, zero_division=0),
+    }]).round(3)
+    st.write("**Test metrics (best model):**")
+    st.dataframe(test_table, use_container_width=True)
 
     # ROC
     fpr, tpr, _ = roc_curve(y_test, y_score)
-    fig, ax = plt.subplots(figsize=(6,4))
+    fig, ax = plt.subplots(figsize=(6, 4))
     plt.plot(fpr, tpr, lw=2, label=f"{best_name}")
-    plt.plot([0,1],[0,1], "--", lw=1.2, label="Baseline")
+    plt.plot([0, 1], [0, 1], "--", lw=1.2, label="Baseline")
     plt.title("ROC – Best Model (FAST Halving)")
     plt.xlabel("FPR"); plt.ylabel("TPR")
     plt.legend(); plt.grid(alpha=0.3, linestyle="--")
@@ -1307,7 +1317,7 @@ else:
 
     # CM
     cm = confusion_matrix(y_test, y_pred)
-    fig, ax = plt.subplots(figsize=(5.6,4.4))
+    fig, ax = plt.subplots(figsize=(5.6, 4.4))
     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
                 xticklabels=["No Churn", "Churn"],
                 yticklabels=["No Churn", "Churn"])
@@ -1317,9 +1327,9 @@ else:
 
     # ROC
     fpr, tpr, _ = roc_curve(y_test, y_score)
-    fig, ax = plt.subplots(figsize=(6,4))
+    fig, ax = plt.subplots(figsize=(6, 4))
     plt.plot(fpr, tpr, lw=2, label="RandomForest")
-    plt.plot([0,1],[0,1], "--", lw=1.2, label="Baseline")
+    plt.plot([0, 1], [0, 1], "--", lw=1.2, label="Baseline")
     plt.title("ROC – RandomForest (default)")
     plt.xlabel("FPR"); plt.ylabel("TPR")
     plt.legend(); plt.grid(alpha=0.3, linestyle="--")
