@@ -1916,7 +1916,7 @@ except ImportError:
     HAS_DALEX = False
     st.info("DALEX not installed. Skipping DALEX interpretation.")
 
-if HAS_DALEX:
+if RUN_DALEX and HAS_DALEX:
     def _predict(m, X_):
         if hasattr(m, "predict_proba"):
             proba = m.predict_proba(X_)
@@ -2047,7 +2047,11 @@ if HAS_DALEX:
                     ax.set_xlabel(var); ax.set_ylabel("predicted prob")
                     ax.grid(alpha=0.3, linestyle="--")
                     plt.tight_layout(); st.pyplot(fig)
-                    
+elif not RUN_DALEX:
+    st.info("DALEX dimatikan. Centang **Jalankan DALEX (sangat lambat)** di sidebar untuk menampilkan interpretasi.")
+elif RUN_DALEX and not HAS_DALEX:
+    st.warning("Paket DALEX belum terpasang. Pasang dulu.")
+
 """Interpretasi Grafik
 1. Variable Importance (dropout loss)
   - Age memiliki pengaruh terbesar terhadap AUC model (nilai tertinggi), diikuti oleh Balance, Geography, dan NumOfProducts.
