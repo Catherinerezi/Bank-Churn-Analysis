@@ -1948,30 +1948,46 @@ if HAS_DALEX:
         st.pyplot(fig)
 
     # Variable Profile / PDP
-    focus_feats = [c for c in ["Age","CreditScore","Balance","NumOfProducts","Tenure"]
-                   if c in X_test.columns]
-    vp = explainer.model_profile(variables=focus_feats or num_cols[:3])
-    df_vp = vp.result.copy()
+focus_feats = [c for c in ["Age","CreditScore","Balance","NumOfProducts","Tenure"]
+               if c in X_test.columns]
 
-    try:
-        import plotly.express as px
-        for var in (focus_feats or num_cols[:3]):
-            sub = df_vp[df_vp["variable"] == var]
-            if {"_x_", "_yhat_"}.issubset(sub.columns):
-                fig_pdp = px.line(sub, x="_x_", y="_yhat_", title=f"DALEX – PDP: {var}",
-                                  labels={"_x_": var, "_yhat_": "predicted prob"})
-                st.plotly_chart(fig_pdp, use_container_width=True)
-    except Exception:
-        for var in (focus_feats or num_cols[:3]):
-            sub = df_vp[df_vp["variable"] == var]
-            if {"_x_", "_yhat_"}.issubset(sub.columns):
-                fig, ax = plt.subplots(figsize=(6, 4))
-                ax.plot(sub["_x_"], sub["_yhat_"])
-                ax.set_title(f"DALEX – PDP: {var}")
-                ax.set_xlabel(var); ax.set_ylabel("predicted prob")
-                ax.grid(alpha=0.3, linestyle="--")
-                plt.tight_layout()
-                st.pyplot(fig)
+vp = explainer.model_profile(variables=focus_feats or num_cols[:3])
+df_vp = vp.result.copy()
+
+# Cari nama kolom yang benar di df_vp
+def pick(colnames, candidates):
+    for c in candidates:
+        if c in colnames:
+            return c
+    raise KeyError(f"Tidak menemukan kolom salah satu dari {candidates} pada: {list(colnames)}")
+
+var_col = pick(df_vp.columns, ["variable", "variable_name", "_variable_"])
+x_col   = pick(df_vp.columns, ["_x_", "variable_value", "x", "grid"])
+y_col   = pick(df_vp.columns, ["_yhat_", "yhat", "_y_", "prediction"])
+
+# Kalau focus_feats kosong atau ada yang tidak tersedia, gunakan yang ada di df_vp
+available_vars = df_vp[var_col].unique().tolist()
+want_vars = [v for v in (focus_feats or num_cols[:3]) if v in available_vars] or available_vars[:3]
+
+# Plot PDP per fitur (Plotly; fallback ke Matplotlib bila perlu)
+try:
+    import plotly.express as px
+    for var in want_vars:
+        sub = df_vp[df_vp[var_col] == var]
+        fig_pdp = px.line(sub, x=x_col, y=y_col, title=f"DALEX – PDP: {var}",
+                          labels={x_col: var, y_col: "predicted prob"})
+        st.plotly_chart(fig_pdp, use_container_width=True)
+except Exception:
+    for var in want_vars:
+        sub = df_vp[df_vp[var_col] == var]
+        fig, ax = plt.subplots(figsize=(6,4))
+        ax.plot(sub[x_col], sub[y_col])
+        ax.set_title(f"DALEX – PDP: {var}")
+        ax.set_xlabel(var); ax.set_ylabel("predicted prob")
+        ax.grid(alpha=0.3, linestyle="--")
+        plt.tight_layout()
+        st.pyplot(fig)
+
 
 """Interpretasi Grafik
 1. Variable Importance (dropout loss)
