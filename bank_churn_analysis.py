@@ -1886,25 +1886,42 @@ try:
 except ImportError:
     HAS_DALEX = False
     st.write("DALEX not installed. Skipping DALEX interpretation.")
+if HAS_DALEX:
+    def _predict(m, X_):
+        if hasattr(m, "predict_proba"):
+            proba = m.predict_proba(X_)
+            proba = np.asarray(proba)
+            if proba.ndim == 2:
+                if hasattr(m, "classes_") and 1 in list(getattr(m, "classes_", [])):
+                    idx = list(m.classes_).index(1)
+                    return proba[:, idx]
+                return proba[:, -1]
+            return proba.ravel()
+        if hasattr(m, "decision_function"):
+            dec = np.asarray(m.decision_function(X_)).ravel()
+            return (dec - dec.min()) / (dec.max() - dec.min() + 1e-12)
+        return m.predict(X_).astype(float)
 
+    explainer = dx.Explainer(
+        model=pipe,
+        data=X_test,
+        y=y_test,
+        predict_function=_predict,
+        label="ChurnModel",
+        verbose=False,
+    )
 
-if HAS_DALEX and hasattr(pipe.named_steps["clf"], "predict_proba"):
-  explainer = dx.Explainer(
-    model=pipe, data=X_test, y=y_test,
-    predict_function=lambda m, X_: m.predict_proba(X_)[:,1],
-    label="ChurnModel"
-  )
-  vi = explainer.model_parts(loss_function="auc")  # kontribusi variabel ke AUC
-  st.write("\nDALEX – Variable Importance (head):")
-  st.write(vi.result.head(10))
+ # Variable Importance (AUC dropout)
+    vi = explainer.model_parts(loss_function="auc")
+    st.write("\nDALEX – Variable Importance (head):")
+    st.write(vi.result.head(10))
+    st.plotly_chart(vi.plot())
 
-  vp = explainer.model_profile(variables=focus_feats or num_cols[:3])
-
-  # DALEX plot
-  if vp:
+# Variable Profile / PDP
+    focus_feats = [c for c in ["Age","CreditScore","Balance","NumOfProducts","Tenure"] if c in X_test.columns]
+    vp = explainer.model_profile(variables=focus_feats or num_cols[:3])
     st.write("\nDALEX – Variable Profile (Partial Dependence) plots:")
-    fig = vp.plot()
-    st.pyplot(fig)
+    st.plotly_chart(vp.plot())
 
 """Interpretasi Grafik
 1. Variable Importance (dropout loss)
