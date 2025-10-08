@@ -1223,9 +1223,28 @@ if RUN_TUNING:
         best_fitted[name] = hrs.best_estimator_
         st.write(f"Best CV AUC ({name}) = {hrs.best_score_:.3f}")
 
-    results_df = pd.DataFrame(results).sort_values("CV_ROC_AUC", ascending=False)
-    st.write("\n FAST Halving results")
-    st.write(results_df.to_string(index=False))
+    results_df = pd.DataFrame(results).sort_values("CV_ROC_AUC", ascending=False).reset_index(drop=True)
+    
+# Flatten kolom BestParams -> kolom2 lebar
+params_wide = pd.json_normalize(results_df["BestParams"]).rename(
+    columns=lambda c: c.replace("clf__", "")  # biar rapi, buang prefix 'clf__'
+)
+
+# Gabungkan skor + params
+table_df = pd.concat(
+    [results_df[["Model", "CV_ROC_AUC"]].round(3), params_wide],
+    axis=1
+)
+st.write("**FAST Halving results (tabel):**")
+st.dataframe(table_df, use_container_width=True)
+
+# versi ringkas satu kolom string
+results_df["BestParams (compact)"] = results_df["BestParams"].apply(
+    lambda d: ", ".join(f"{k.replace('clf__','')}={v}" for k, v in d.items())
+)
+st.write("**Ringkas:**")
+st.dataframe(results_df[["Model", "CV_ROC_AUC", "BestParams (compact)"]].round(3),
+             use_container_width=True)
 
     # --- Refit pemenang di FULL train & evaluasi test ---
     best_name  = results_df.iloc[0]["Model"]
