@@ -1885,10 +1885,9 @@ try:
     HAS_DALEX = True
 except ImportError:
     HAS_DALEX = False
-    st.write("DALEX not installed. Skipping DALEX interpretation.")
-    
+    st.info("DALEX not installed. Skipping DALEX interpretation.")
+
 if HAS_DALEX:
-    # pred function aman utk semua model (proba/decision/predict)
     def _predict(m, X_):
         if hasattr(m, "predict_proba"):
             proba = m.predict_proba(X_)
@@ -1905,90 +1904,121 @@ if HAS_DALEX:
         return m.predict(X_).astype(float)
 
     explainer = dx.Explainer(
-        model=pipe, data=X_test, y=y_test,
-        predict_function=_predict, label="ChurnModel", verbose=False
+        model=pipe,
+        data=X_test,
+        y=y_test,
+        predict_function=_predict,
+        label="ChurnModel",
+        verbose=False,
     )
 
-    # Variable Importance (VI)
+    # Variable Importance (AUC dropout)
     vi = explainer.model_parts(loss_function="auc")
     st.write("\nDALEX – Variable Importance (head):")
     st.write(vi.result.head(10))
 
-    # coba pakai plotly dulu, kalau error -> fallback ke matplotlib
     try:
         import plotly.graph_objects as go
+
         df_vi = vi.result.copy()
-        df_vi = df_vi[df_vi["variable"] != "_full_model_"].sort_values(
-            "dropout_loss", ascending=False
-        )
+        var_name  = next((c for c in ["variable","variable_name","_variable_"] if c in df_vi.columns), None)
+        loss_name = next((c for c in ["dropout_loss","loss","_dropout_loss_"] if c in df_vi.columns), None)
+        if var_name is None or loss_name is None:
+            raise KeyError("Unknown VI schema")
+
+        df_vi = df_vi[df_vi[var_name] != "_full_model_"].sort_values(loss_name, ascending=False)
+
         fig_vi = go.Figure(go.Bar(
-            x=df_vi["dropout_loss"],
-            y=df_vi["variable"],
+            x=df_vi[loss_name],
+            y=df_vi[var_name],
             orientation="h",
-            hovertemplate="dropout_loss=%{x:.4f}<extra>%{y}</extra>",
+            hovertemplate=f"{loss_name}=%{{x:.4f}}<extra>%{{y}}</extra>",
         ))
         fig_vi.update_layout(
             title="DALEX – Variable Importance (dropout loss)",
-            xaxis_title="dropout_loss (AUC)",
+            xaxis_title=f"{loss_name} (AUC)",
             yaxis_title="feature",
-            margin=dict(l=100, r=20, t=40, b=40),
+            margin=dict(l=120, r=20, t=40, b=40),
         )
         st.plotly_chart(fig_vi, use_container_width=True)
     except Exception:
         df_vi = vi.result.copy()
-        df_vi = df_vi[df_vi["variable"] != "_full_model_"].sort_values(
-            "dropout_loss", ascending=False
-        )
+        var_name  = next((c for c in ["variable","variable_name","_variable_"] if c in df_vi.columns), list(df_vi.columns)[0])
+        loss_name = next((c for c in ["dropout_loss","loss","_dropout_loss_"] if c in df_vi.columns), list(df_vi.select_dtypes("number").columns)[0])
+        df_vi = df_vi[df_vi[var_name] != "_full_model_"].sort_values(loss_name, ascending=False)
+
         fig, ax = plt.subplots(figsize=(7, max(4, 0.35 * len(df_vi))))
-        ax.barh(df_vi["variable"][::-1], df_vi["dropout_loss"][::-1])
+        ax.barh(df_vi[var_name][::-1], df_vi[loss_name][::-1])
         ax.set_title("DALEX – Variable Importance (dropout loss)")
-        ax.set_xlabel("dropout_loss (AUC)")
-        ax.set_ylabel("feature")
-        plt.tight_layout()
-        st.pyplot(fig)
+        ax.set_xlabel(f"{loss_name} (AUC)"); ax.set_ylabel("feature")
+        plt.tight_layout(); st.pyplot(fig)
 
-    # Variable Profile / PDP
-focus_feats = [c for c in ["Age","CreditScore","Balance","NumOfProducts","Tenure"]
-               if c in X_test.columns]
+    # Variable Profile / PDP (robust)
+    focus_feats = [c for c in ["Age","CreditScore","Balance","NumOfProducts","Tenure"] if c in X_test.columns]
+    vp = explainer.model_profile(variables=focus_feats or num_cols[:3])
+    df_vp = vp.result.copy()
+    cols = df_vp.columns
 
-vp = explainer.model_profile(variables=focus_feats or num_cols[:3])
-df_vp = vp.result.copy()
+    def pick_by_name(cols, candidates):
+        for c in candidates:
+            if c in cols:
+                return c
+        return None
 
-# Cari nama kolom yang benar di df_vp
-def pick(colnames, candidates):
-    for c in candidates:
-        if c in colnames:
-            return c
-    raise KeyError(f"Tidak menemukan kolom salah satu dari {candidates} pada: {list(colnames)}")
+    # cari kolom nama variabel
+    var_col = pick_by_name(cols, ["variable","variable_name","_variable_"])
+    if var_col is None:
+        obj_cols = [c for c in cols if df_vp[c].dtype == object]
+        cand = [(c, df_vp[c].nunique()) for c in obj_cols if df_vp[c].nunique() > 1]
+        var_col = min(cand, key=lambda x: x[1])[0] if cand else None
 
-var_col = pick(df_vp.columns, ["variable", "variable_name", "_variable_"])
-x_col   = pick(df_vp.columns, ["_x_", "variable_value", "x", "grid"])
-y_col   = pick(df_vp.columns, ["_yhat_", "yhat", "_y_", "prediction"])
+    if var_col is None:
+        st.warning(f"DALEX PDP: tidak menemukan kolom nama variabel di {list(cols)}; PDP dilewati.")
+    else:
+        x_col = pick_by_name(cols, ["_x_","variable_value","x","grid"])
+        y_col = pick_by_name(cols, ["_yhat_","yhat","_y_","prediction","y"])
 
-# Kalau focus_feats kosong atau ada yang tidak tersedia, gunakan yang ada di df_vp
-available_vars = df_vp[var_col].unique().tolist()
-want_vars = [v for v in (focus_feats or num_cols[:3]) if v in available_vars] or available_vars[:3]
+        if x_col is None or y_col is None:
+            num_cols_vp = [c for c in cols if np.issubdtype(df_vp[c].dtype, np.number)]
+            if len(num_cols_vp) >= 2:
+                try:
+                    means = {c: df_vp.groupby(var_col)[c].nunique().mean() for c in num_cols_vp}
+                    y_col = y_col or min(means, key=means.get)
+                    x_col = x_col or [c for c in num_cols_vp if c != y_col][0]
+                except Exception:
+                    y_col = y_col or num_cols_vp[-1]
+                    x_col = x_col or num_cols_vp[0]
+            else:
+                x_col = y_col = None
 
-# Plot PDP per fitur (Plotly; fallback ke Matplotlib bila perlu)
-try:
-    import plotly.express as px
-    for var in want_vars:
-        sub = df_vp[df_vp[var_col] == var]
-        fig_pdp = px.line(sub, x=x_col, y=y_col, title=f"DALEX – PDP: {var}",
-                          labels={x_col: var, y_col: "predicted prob"})
-        st.plotly_chart(fig_pdp, use_container_width=True)
-except Exception:
-    for var in want_vars:
-        sub = df_vp[df_vp[var_col] == var]
-        fig, ax = plt.subplots(figsize=(6,4))
-        ax.plot(sub[x_col], sub[y_col])
-        ax.set_title(f"DALEX – PDP: {var}")
-        ax.set_xlabel(var); ax.set_ylabel("predicted prob")
-        ax.grid(alpha=0.3, linestyle="--")
-        plt.tight_layout()
-        st.pyplot(fig)
+        if x_col and y_col:
+            available_vars = df_vp[var_col].unique().tolist()
+            want_vars = [v for v in (focus_feats or num_cols[:3]) if v in available_vars] or available_vars[:3]
 
-
+            try:
+                import plotly.express as px
+                for var in want_vars:
+                    sub = df_vp[df_vp[var_col] == var]
+                    if sub.empty:
+                        continue
+                    fig_pdp = px.line(
+                        sub, x=x_col, y=y_col,
+                        title=f"DALEX – PDP: {var}",
+                        labels={x_col: var, y_col: "predicted prob"},
+                    )
+                    st.plotly_chart(fig_pdp, use_container_width=True)
+            except Exception:
+                for var in want_vars:
+                    sub = df_vp[df_vp[var_col] == var]
+                    if sub.empty:
+                        continue
+                    fig, ax = plt.subplots(figsize=(6, 4))
+                    ax.plot(sub[x_col], sub[y_col])
+                    ax.set_title(f"DALEX – PDP: {var}")
+                    ax.set_xlabel(var); ax.set_ylabel("predicted prob")
+                    ax.grid(alpha=0.3, linestyle="--")
+                    plt.tight_layout(); st.pyplot(fig)
+                    
 """Interpretasi Grafik
 1. Variable Importance (dropout loss)
   - Age memiliki pengaruh terbesar terhadap AUC model (nilai tertinggi), diikuti oleh Balance, Geography, dan NumOfProducts.
